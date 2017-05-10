@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Cloudlet" %}{% endblock %}
+
+{% block page_header %}
+  {% include "horizon/common/_page_header.html" with title=_("Cloudlet") %}
+{% endblock page_header %}
+
+{% block main %}
+    <div class="images">
+        {{ images_table.render }}
+    </div>
+    <div class="images">
+        {{ overlays_table.render }}
+    </div>
+{% endblock %}
+
+
