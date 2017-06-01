@@ -10,13 +10,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import os
+import shutil
+import logging
+
 from django.conf import settings
-from django.core import validators
 from django.forms import ValidationError
 from django.forms.widgets import HiddenInput
-from django.template import defaultfilters
 from django.utils.translation import ugettext_lazy as _
-import six
 
 from horizon import exceptions
 from horizon import forms
@@ -24,64 +25,38 @@ from horizon import messages
 
 from openstack_dashboard import api
 from openstack_dashboard import policy
+from openstack_dashboard.dashboards.project.cloudlet import utils
+
+LOG = logging.getLogger(__name__)
 
 
-IMAGE_BACKEND_SETTINGS = getattr(settings, 'OPENSTACK_IMAGE_BACKEND', {})
-IMAGE_FORMAT_CHOICES = IMAGE_BACKEND_SETTINGS.get('image_formats', [])
-
-
-class ImageURLField(forms.URLField):
-    default_validators = [validators.URLValidator(schemes=["http", "https"])]
-
-
-def create_image_metadata(data):
-    """Use the given dict of image form data to generate the metadata used for
-    creating the image in glance.
-    """
-    # Glance does not really do anything with container_format at the
-    # moment. It requires it is set to the same disk_format for the three
-    # Amazon image types, otherwise it just treats them as 'bare.' As such
-    # we will just set that to be that here instead of bothering the user
-    # with asking them for information we can already determine.
-    disk_format = data['disk_format']
-    if disk_format in ('ami', 'aki', 'ari',):
-        container_format = disk_format
-    elif disk_format == 'docker':
-        # To support docker containers we allow the user to specify
-        # 'docker' as the format. In that case we really want to use
-        # 'raw' as the disk format and 'docker' as the container format.
-        disk_format = 'raw'
-        container_format = 'docker'
-    elif disk_format == 'ova':
-        # If the user wishes to upload an OVA using Horizon, then
-        # 'ova' must be the container format and 'vmdk' must be the disk
-        # format.
-        container_format = 'ova'
-        disk_format = 'vmdk'
-    else:
-        container_format = 'bare'
-
-    meta = {'protected': data['protected'],
-            'disk_format': disk_format,
-            'container_format': container_format,
+def create_image_metadata(data, name, path, glance_ref=None):
+    meta = {'name': name,
+            'data': open(path, "rb"),
+            'disk_format': 'raw',
+            'container_format': 'bare',
             'min_disk': (data['minimum_disk'] or 0),
-            'min_ram': (data['minimum_ram'] or 0),
-            'name': data['name']}
+            'min_ram': (data['minimum_ram'] or 0)}
 
     is_public = data.get('is_public', data.get('public', False))
-    properties = {}
-    # NOTE(tsufiev): in V2 the way how empty non-base attributes (AKA metadata)
-    # are handled has changed: in V2 empty metadata is kept in image
-    # properties, while in V1 they were omitted. Skip empty description (which
-    # is metadata) to keep the same behavior between V1 and V2
-    if data.get('description'):
-        properties['description'] = data['description']
-    if data.get('kernel'):
-        properties['kernel_id'] = data['kernel']
-    if data.get('ramdisk'):
-        properties['ramdisk_id'] = data['ramdisk']
-    if data.get('architecture'):
-        properties['architecture'] = data['architecture']
+    cloudlet_types = {
+        'disk': 'cloudlet_base_disk',
+        'memory': 'cloudlet_base_memory',
+        'diskhash': 'cloudlet_base_disk_hash',
+        'memhash': 'cloudlet_base_memory_hash'
+    }
+    base_type = cloudlet_types.get(name.split("-")[1])
+
+    properties = {
+        'image_type': 'snapshot',
+        'image_location': 'snapshot',
+        'is_cloudlet': 'True',
+        'cloudlet_type': base_type,
+        'base_sha256_uuid': data['base_hashvalue']
+    }
+
+    if glance_ref is not None:
+        properties.update(glance_ref)
 
     if api.glance.VERSIONS.active < 2:
         meta.update({'is_public': is_public, 'properties': properties})
@@ -92,106 +67,21 @@ def create_image_metadata(data):
     return meta
 
 
-if api.glance.get_image_upload_mode() == 'direct':
-    FileField = forms.ExternalFileField
-    CreateParent = six.with_metaclass(forms.ExternalUploadMeta,
-                                      forms.SelfHandlingForm)
-else:
-    FileField = forms.FileField
-    CreateParent = forms.SelfHandlingForm
-
-
-class CreateImageForm(CreateParent):
-    name = forms.CharField(max_length=255, label=_("Name"))
-    description = forms.CharField(
+class CreateImageForm(forms.SelfHandlingForm):
+    name = forms.CharField(
         max_length=255,
-        widget=forms.Textarea(attrs={'rows': 4}),
-        label=_("Description"),
+        label=_("Name"),
+        widget=forms.TextInput(attrs={
+            'placeholder': 'ubuntu-base'}),
+        required=True)
+    image_file = forms.FileField(
+        label=_("Image File"),
+        help_text=("A local image to upload."),
         required=False)
-    source_type = forms.ChoiceField(
-        label=_('Image Source'),
-        required=False,
-        choices=[('url', _('Image Location')),
-                 ('file', _('Image File'))],
-        widget=forms.ThemableSelectWidget(attrs={
-            'class': 'switchable',
-            'data-slug': 'source'}))
-    image_url_attrs = {
-        'class': 'switched',
-        'data-switch-on': 'source',
-        'data-source-url': _('Image Location'),
-        'ng-model': 'ctrl.copyFrom',
-        'ng-change': 'ctrl.selectImageFormat(ctrl.copyFrom)',
-        'placeholder': 'http://example.com/image.img'
-    }
-    image_url = ImageURLField(label=_("Image Location"),
-                              help_text=_("An external (HTTP/HTTPS) URL to "
-                                          "load the image from."),
-                              widget=forms.TextInput(attrs=image_url_attrs),
-                              required=False)
-    image_attrs = {
-        'class': 'switched',
-        'data-switch-on': 'source',
-        'data-source-file': _('Image File'),
-        'ng-model': 'ctrl.imageFile',
-        'ng-change': 'ctrl.selectImageFormat(ctrl.imageFile.name)',
-        'image-file-on-change': None
-    }
-    image_file = FileField(label=_("Image File"),
-                           help_text=_("A local image to upload."),
-                           widget=forms.FileInput(attrs=image_attrs),
-                           required=False)
-    kernel = forms.ChoiceField(
-        label=_('Kernel'),
-        required=False,
-        widget=forms.ThemableSelectWidget(
-            transform=lambda x: "%s (%s)" % (
-                x.name, defaultfilters.filesizeformat(x.size))))
-    ramdisk = forms.ChoiceField(
-        label=_('Ramdisk'),
-        required=False,
-        widget=forms.ThemableSelectWidget(
-            transform=lambda x: "%s (%s)" % (
-                x.name, defaultfilters.filesizeformat(x.size))))
-    disk_format = forms.ChoiceField(label=_('Format'),
-                                    choices=[],
-                                    widget=forms.ThemableSelectWidget(attrs={
-                                        'class': 'switchable',
-                                        'ng-model': 'ctrl.diskFormat'}))
-    architecture = forms.CharField(
-        max_length=255,
-        label=_("Architecture"),
-        help_text=_('CPU architecture of the image.'),
-        required=False)
-    minimum_disk = forms.IntegerField(
-        label=_("Minimum Disk (GB)"),
-        min_value=0,
-        help_text=_('The minimum disk size required to boot the image. '
-                    'If unspecified, this value defaults to 0 (no minimum).'),
-        required=False)
-    minimum_ram = forms.IntegerField(
-        label=_("Minimum RAM (MB)"),
-        min_value=0,
-        help_text=_('The minimum memory size required to boot the image. '
-                    'If unspecified, this value defaults to 0 (no minimum).'),
-        required=False)
-    is_copying = forms.BooleanField(
-        label=_("Copy Data"), initial=True, required=False,
-        help_text=_('Specify this option to copy image data to the image '
-                    'service. If unspecified, image data will be used in its '
-                    'current location.'),
-        widget=forms.CheckboxInput(attrs={
-            'class': 'switched',
-            'data-source-url': _('Image Location'),
-            'data-switch-on': 'source'}))
     is_public = forms.BooleanField(
         label=_("Public"),
-        help_text=_('Make the image visible across projects.'),
-        required=False)
-    protected = forms.BooleanField(
-        label=_("Protected"),
-        help_text=_('Prevent the deletion of the image.'),
-        required=False)
+        required=False,
+        initial=True)
 
     def __init__(self, request, *args, **kwargs):
         super(CreateImageForm, self).__init__(request, *args, **kwargs)
@@ -199,17 +89,13 @@ class CreateImageForm(CreateParent):
         if (api.glance.get_image_upload_mode() == 'off' or
                 not policy.check((("image", "upload_image"),), request)):
             self._hide_file_source_type()
-        if not policy.check((("image", "set_image_location"),), request):
-            self._hide_url_source_type()
 
         # GlanceV2 feature removals
         if api.glance.VERSIONS.active >= 2:
             # NOTE: GlanceV2 doesn't support copy-from feature, sorry!
-            self._hide_is_copying()
             if not getattr(settings, 'IMAGES_ALLOW_LOCATION', False):
-                self._hide_url_source_type()
                 if (api.glance.get_image_upload_mode() == 'off' or not
-                        policy.check((("image", "upload_image"),), request)):
+                policy.check((("image", "upload_image"),), request)):
                     # Neither setting a location nor uploading image data is
                     # allowed, so throw an error.
                     msg = _('The current Horizon settings indicate no valid '
@@ -222,40 +108,6 @@ class CreateImageForm(CreateParent):
         if not policy.check((("image", "publicize_image"),), request):
             self._hide_is_public()
 
-        self.fields['disk_format'].choices = IMAGE_FORMAT_CHOICES
-
-        try:
-            kernel_images = api.glance.image_list_detailed(
-                request, filters={'disk_format': 'aki'})[0]
-        except Exception:
-            kernel_images = []
-            msg = _('Unable to retrieve image list.')
-            messages.error(request, msg)
-
-        if kernel_images:
-            choices = [('', _("Choose an image"))]
-            for image in kernel_images:
-                choices.append((image.id, image))
-            self.fields['kernel'].choices = choices
-        else:
-            del self.fields['kernel']
-
-        try:
-            ramdisk_images = api.glance.image_list_detailed(
-                request, filters={'disk_format': 'ari'})[0]
-        except Exception:
-            ramdisk_images = []
-            msg = _('Unable to retrieve image list.')
-            messages.error(request, msg)
-
-        if ramdisk_images:
-            choices = [('', _("Choose an image"))]
-            for image in ramdisk_images:
-                choices.append((image.id, image))
-            self.fields['ramdisk'].choices = choices
-        else:
-            del self.fields['ramdisk']
-
     def _hide_file_source_type(self):
         self.fields['image_file'].widget = HiddenInput()
         source_type = self.fields['source_type']
@@ -264,62 +116,101 @@ class CreateImageForm(CreateParent):
         if len(source_type.choices) == 1:
             source_type.widget = HiddenInput()
 
-    def _hide_url_source_type(self):
-        self.fields['image_url'].widget = HiddenInput()
-        source_type = self.fields['source_type']
-        source_type.choices = [choice for choice in source_type.choices
-                               if choice[0] != 'url']
-        if len(source_type.choices) == 1:
-            source_type.widget = HiddenInput()
-
     def _hide_is_public(self):
         self.fields['is_public'].widget = HiddenInput()
         self.fields['is_public'].initial = False
-
-    def _hide_is_copying(self):
-        self.fields['is_copying'].widget = HiddenInput()
-        self.fields['is_copying'].initial = False
 
     def clean(self):
         data = super(CreateImageForm, self).clean()
 
         # The image_file key can be missing based on particular upload
         # conditions. Code defensively for it here...
-        source_type = data.get('source_type', None)
         image_file = data.get('image_file', None)
-        image_url = data.get('image_url', None)
-
-        if not image_url and not image_file:
+        if not image_file:
             msg = _("An image file or an external location must be specified.")
-            if source_type == 'file':
-                raise ValidationError({'image_file': [msg, ]})
-            else:
-                raise ValidationError({'image_url': [msg, ]})
+            raise ValidationError({'image_file': [msg, ]})
         else:
-            return data
+            # TODO: Useing Cloudlet APIs not using Class.
+            basevms = utils.BaseVMs()
+            if basevms.zipfile(data['image_file']):
+                tree = basevms.xml_data()
+                if tree is None:
+                    msg = _('Image File is not valid, no manifest file')
+                    raise ValidationError({'image_file': [msg, ]})
+                else:
+                    base_hashvalue = tree.get('hash_value')
+                    data['base_hashvalue'] = base_hashvalue
+                    matching_base = basevms.is_exist(self.request, base_hashvalue)
+                    if matching_base is not None:
+                        msg = _("Base VM exists : UUID(%s)" % matching_base.id)
+                        raise ValidationError(msg)
+
+                    return data
+            else:
+                msg = _("Image File is not valid, not a zipped base VM")
+                raise ValidationError({'image_file': [msg, ]})
 
     def handle(self, request, data):
-        meta = create_image_metadata(data)
-
-        # Add image source file or URL to metadata
-        if (api.glance.get_image_upload_mode() != 'off' and
-                policy.check((("image", "upload_image"),), request) and
-                data.get('image_file', None)):
-            meta['data'] = data['image_file']
-        elif data.get('is_copying'):
-            meta['copy_from'] = data['image_url']
+        # TODO: Useing Cloudlet APIs not using Class.
+        basevms = utils.BaseVMs()
+        if basevms.zipfile(data['image_file']):
+            tree = basevms.xml_data()
+            basevms_path = basevms.path(tree)
+            temp_dir = basevms.unzip()
+        # Get Base VM CPU count, memory size(MB) and disk size(GB)
+        qemu_mem = utils.QemuMemory()
+        libvirt_xml_str = qemu_mem.libvirt_xml(os.path.join(temp_dir, basevms_path['memory']))
+        cpu_count, memory_size_mb = qemu_mem.get_resource_size(libvirt_xml_str)
+        disk_gb = basevms.min_disk(os.path.join(temp_dir, basevms_path['disk']))
+        data['minimum_ram'] = memory_size_mb
+        data['minimum_disk'] = disk_gb
+        # Check Base VM spec (CPU core, memory size and disk size) is exitsing Flavor list
+        if cpu_count is None or memory_size_mb is None:
+            msg = "Cannot find memory size or CPU number of Base VM"
+            raise ValidationError(_(msg))
         else:
-            meta['location'] = data['image_url']
+            flavors = api.nova.flavor_list(request)
+            ref_flavors = utils.find_matching_flavor(flavors, cpu_count, memory_size_mb, disk_gb)
+            if len(ref_flavors) == 0:
+                flavor_name = "cloudlet-flavor-%s" % data['name']
+                api.nova.flavor_create(self.request,
+                                       flavor_name,
+                                       memory_size_mb,
+                                       cpu_count,
+                                       disk_gb,
+                                       is_public=True)
+                msg = "Create new flavor %s with (cpu:%d, memory:%d, disk:%d)" % \
+                      (flavor_name, cpu_count, memory_size_mb, disk_gb)
+                LOG.info(msg)
 
         try:
+            # Create image metadata and Upload image to glance without disk image
+            glance_ref = {'base_resource_xml_str': libvirt_xml_str.replace("\n", "")}
+            for key, value in basevms_path.iteritems():
+                name = data['name'] + "-" + key
+                path = os.path.join(temp_dir, value)
+                if key == 'disk':
+                    continue
+                meta = create_image_metadata(data, name, path)
+                image = api.glance.image_create(request, **meta)
+                glance_ref[image.properties.get("cloudlet_type", None)] = image.id
+
+            # Create disk image metadata and Upload image
+            disk_name = data['name'] + "-disk"
+            disk_path = os.path.join(temp_dir, value)
+            meta = create_image_metadata(data, disk_name, disk_path, glance_ref)
             image = api.glance.image_create(request, **meta)
+            # All Base VM zip file upload to glance success
             messages.info(request,
                           _('Your image %s has been queued for creation.') %
                           meta['name'])
+            # Delete Base VM unzip temp directory
+            dirpath = os.path.dirname(os.path.join(temp_dir, basevms_path['disk']))
+            if os.path.exists(dirpath):
+                shutil.rmtree(dirpath)
             return image
         except Exception as e:
             msg = _('Unable to create new image')
-            # TODO(nikunj2512): Fix this once it is fixed in glance client
             if hasattr(e, 'code') and e.code == 400:
                 if "Invalid disk format" in e.details:
                     msg = _('Unable to create new image: Invalid disk format '
@@ -338,55 +229,11 @@ class CreateImageForm(CreateParent):
 class UpdateImageForm(forms.SelfHandlingForm):
     image_id = forms.CharField(widget=forms.HiddenInput())
     name = forms.CharField(max_length=255, label=_("Name"))
-    description = forms.CharField(
-        max_length=255,
-        widget=forms.Textarea(attrs={'rows': 4}),
-        label=_("Description"),
-        required=False)
-    kernel = forms.CharField(
-        max_length=36,
-        label=_("Kernel ID"),
-        required=False,
-        widget=forms.TextInput(attrs={'readonly': 'readonly'}),
-    )
-    ramdisk = forms.CharField(
-        max_length=36,
-        label=_("Ramdisk ID"),
-        required=False,
-        widget=forms.TextInput(attrs={'readonly': 'readonly'}),
-    )
-    architecture = forms.CharField(
-        label=_("Architecture"),
-        required=False,
-        widget=forms.TextInput(attrs={'readonly': 'readonly'}),
-    )
-    disk_format = forms.ThemableChoiceField(
-        label=_("Format"),
-    )
-    minimum_disk = forms.IntegerField(label=_("Minimum Disk (GB)"),
-                                      min_value=0,
-                                      help_text=_('The minimum disk size'
-                                                  ' required to boot the'
-                                                  ' image. If unspecified,'
-                                                  ' this value defaults to'
-                                                  ' 0 (no minimum).'),
-                                      required=False)
-    minimum_ram = forms.IntegerField(label=_("Minimum RAM (MB)"),
-                                     min_value=0,
-                                     help_text=_('The minimum memory size'
-                                                 ' required to boot the'
-                                                 ' image. If unspecified,'
-                                                 ' this value defaults to'
-                                                 ' 0 (no minimum).'),
-                                     required=False)
     public = forms.BooleanField(label=_("Public"), required=False)
-    protected = forms.BooleanField(label=_("Protected"), required=False)
 
     def __init__(self, request, *args, **kwargs):
         super(UpdateImageForm, self).__init__(request, *args, **kwargs)
-        self.fields['disk_format'].choices = [(value, name) for value,
-                                              name in IMAGE_FORMAT_CHOICES
-                                              if value]
+
         if not policy.check((("image", "publicize_image"),), request):
             self.fields['public'].widget = forms.CheckboxInput(
                 attrs={'readonly': 'readonly', 'disabled': 'disabled'})
@@ -404,4 +251,3 @@ class UpdateImageForm(forms.SelfHandlingForm):
             return image
         except Exception:
             exceptions.handle(request, error_updating % image_id)
-

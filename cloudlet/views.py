@@ -49,13 +49,15 @@ class IndexView(tables.MultiTableView):
                 cloudlet_tables.BaseVMsTable._meta.pagination_param, None)
         reversed_order = prev_marker is not None
         try:
-            images, self._more, self._prev = api.glance.image_list_detailed(
+            all_images, self._more, self._prev = api.glance.image_list_detailed(
                 self.request,
                 marker=marker,
                 paginate=True,
                 sort_dir='asc',
                 sort_key='name',
                 reversed_order=reversed_order)
+            images = [im for im in all_images
+                      if im.properties.get("cloudlet_type", None) == 'cloudlet_base_disk']
         except Exception:
             images = []
             self._prev = self._more = False

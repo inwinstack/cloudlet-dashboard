@@ -10,91 +10,98 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from django.template.defaultfilters import filesizeformat
-from django.utils.translation import ugettext_lazy as _
+import os
+import math
+import zipfile
+from lxml import etree
+from tempfile import mkdtemp
+from xml.etree import ElementTree
 
-from horizon import exceptions
+from openstack_dashboard import api
 
-from openstack_dashboard.api import glance
-
-
-def get_available_images(request, project_id=None, images_cache=None):
-    """Returns a list of images that are public or owned by the given
-    project_id. If project_id is not specified, only public images
-    are returned.
-    :param images_cache: An optional dict-like object in which to
-     cache public and per-project id image metadata.
-    """
-    if images_cache is None:
-        images_cache = {}
-    public_images = images_cache.get('public_images', [])
-    images_by_project = images_cache.get('images_by_project', {})
-    if 'public_images' not in images_cache:
-        public = {"is_public": True,
-                  "status": "active"}
-        try:
-            images, _more, _prev = glance.image_list_detailed(
-                request, filters=public)
-            [public_images.append(image) for image in images]
-            images_cache['public_images'] = public_images
-        except Exception:
-            exceptions.handle(request,
-                              _("Unable to retrieve public images."))
-
-    # Preempt if we don't have a project_id yet.
-    if project_id is None:
-        images_by_project[project_id] = []
-
-    if project_id not in images_by_project:
-        owner = {"property-owner_id": project_id,
-                 "status": "active"}
-        try:
-            owned_images, _more, _prev = glance.image_list_detailed(
-                request, filters=owner)
-            images_by_project[project_id] = owned_images
-        except Exception:
-            owned_images = []
-            exceptions.handle(request,
-                              _("Unable to retrieve images for "
-                                "the current project."))
-    else:
-        owned_images = images_by_project[project_id]
-
-    if 'images_by_project' not in images_cache:
-        images_cache['images_by_project'] = images_by_project
-
-    images = owned_images + public_images
-
-    image_ids = []
-    final_images = []
-    for image in images:
-        if image.id not in image_ids and \
-                image.container_format not in ('aki', 'ari'):
-            image_ids.append(image.id)
-            final_images.append(image)
-    return final_images
+import elijah.provisioning.memory_util as elijah_memory_util
+from elijah.provisioning.package import BaseVMPackage
 
 
-def image_field_data(request, include_empty_option=False):
-    """Returns a list of tuples of all images.
-    Generates a sorted list of images available. And returns a list of
-    (id, name) tuples.
-    :param request: django http request object
-    :param include_empty_option: flag to include a empty tuple in the front of
-        the list
-    :return: list of (id, name) tuples
-    """
-    try:
-        images = get_available_images(request, request.user.project_id)
-    except Exception:
-        exceptions.handle(request, _('Unable to retrieve images'))
-    images.sort(key=lambda c: c.name)
-    images_list = [('', _('Select Image'))]
-    for image in images:
-        image_label = u"{} ({})".format(image.name, filesizeformat(image.size))
-        images_list.append((image.id, image_label))
+def find_matching_flavor(flavor_list, cpu_count, memory_mb, disk_gb):
+    ret = set()
+    for flavor in flavor_list:
+        vcpu = int(flavor.vcpus)
+        ram_mb = int(flavor.ram)
+        block_gb = int(flavor.disk)
+        flavor_name = flavor.name
+        if vcpu == cpu_count and ram_mb == memory_mb and disk_gb == block_gb:
+            flavor_ref = flavor.links[0]['href']
+            flavor_id = flavor.id
+            ret.add((flavor_id, "%s" % flavor_name))
+    return ret
 
-    if not images:
-        return [("", _("No images available")), ]
 
-    return images_list
+class BaseVMs():
+    def zipfile(self, imagefile):
+        is_zipfile = False
+        if zipfile.is_zipfile(imagefile):
+            self.zipbase = zipfile.ZipFile(imagefile)
+            is_zipfile = True
+        return is_zipfile
+
+    def xml_data(self):
+        if BaseVMPackage.MANIFEST_FILENAME in self.zipbase.namelist():
+            xml = self.zipbase.read(BaseVMPackage.MANIFEST_FILENAME)
+            tree = etree.fromstring(xml,
+                                    etree.XMLParser(
+                                        schema=BaseVMPackage.schema
+                                    ))
+            return tree
+        return None
+
+    def path(self, tree):
+        data = dict()
+        if tree is not None:
+            data['disk'] = tree.find(BaseVMPackage.NSP + 'disk').get('path')
+            data['memory'] = tree.find(BaseVMPackage.NSP + 'memory').get('path')
+            data['diskhash'] = tree.find(BaseVMPackage.NSP + 'disk_hash').get('path')
+            data['memhash'] = tree.find(BaseVMPackage.NSP + 'memory_hash').get('path')
+        return data
+
+    def is_exist(self, request, base_hashvalue):
+        image_detail = api.glance.image_list_detailed(request,
+                                                      filters={
+                                                          "is_public": True,
+                                                          "status": "active"})[0]
+
+        for image in image_detail:
+            properties = getattr(image, "properties")
+            base_sha256_uuid = properties.get("base_sha256_uuid")
+            if base_sha256_uuid == base_hashvalue:
+                return image
+        return None
+
+    def unzip(self):
+        temp_dir = mkdtemp(prefix="cloudlet-base-")
+        self.zipbase.extractall(temp_dir)
+        return temp_dir
+
+    def min_disk(self, disk_path):
+        return int(math.ceil(os.path.getsize(disk_path)/1024/1024/1024))
+
+
+class QemuMemory():
+    def libvirt_xml(self, memory_path):
+        return elijah_memory_util._QemuMemoryHeader(open(memory_path)).xml
+
+    def get_resource_size(self, libvirt_xml_str):
+        libvirt_xml = ElementTree.fromstring(libvirt_xml_str)
+        memory_element = libvirt_xml.find("memory")
+        cpu_element = libvirt_xml.find("vcpu")
+        if memory_element is not None and cpu_element is not None:
+            memory_size = int(memory_element.text)
+            memory_unit = memory_element.get("unit").lower()
+            if memory_unit != 'mib' and memory_unit != 'mb' and memory_unit != "m":
+                if memory_unit == 'kib' or memory_unit == 'kb' or memory_unit == 'k':
+                    memory_size = memory_size / 1024
+                elif memory_unit == 'gib' or memory_unit == 'gg' or memory_unit == 'g':
+                    memory_size = memory_size * 1024
+            cpu_count = cpu_element.text
+            return int(cpu_count), int(memory_size)
+        return None, None

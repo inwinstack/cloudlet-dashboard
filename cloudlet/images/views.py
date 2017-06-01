@@ -32,14 +32,14 @@ from openstack_dashboard.dashboards.project.cloudlet.images \
 
 class CreateView(forms.ModalFormView):
     form_class = project_forms.CreateImageForm
-    form_id = "create_image_form"
-    modal_header = _("Create An Image")
-    submit_label = _("Create Image")
+    form_id = "import_basevm_form"
+    modal_header = _("Import Base VM")
+    submit_label = _("Import")
     submit_url = reverse_lazy('horizon:project:cloudlet:images:create')
     template_name = 'project/cloudlet/images/create.html'
     context_object_name = 'image'
     success_url = reverse_lazy("horizon:project:cloudlet:index")
-    page_title = _("Create An Image")
+    page_title = _("Import Base VM")
 
     def get_initial(self):
         initial = {}
