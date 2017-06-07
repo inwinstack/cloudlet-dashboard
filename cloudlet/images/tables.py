@@ -29,8 +29,7 @@ class DownloadImage(tables.LinkAction):
     verbose_name = _("Download VM overlay")
     verbose_name_plural = _("Download VM overlays")
     classes = ("btn-download",)
-    # modify
-    url = "horizon:project:instances:launch"
+    url = "horizon:project:cloudlet:images:download"
 
     def allowed(self, request, image=None):
         if image:
@@ -39,10 +38,8 @@ class DownloadImage(tables.LinkAction):
 
     def get_link_url(self, datum):
         base_url = reverse(self.url)
-        params = urlencode({
-            "image_id": self.table.get_object_id(datum),
-            "image_name": getattr(datum, "name", "vm-overlay"),
-                    })
+        params = urlencode({"image_id": self.table.get_object_id(datum),
+                            "image_name": getattr(datum, "name", "vm-overlay")})
         return "?".join([base_url, params])
 
 
@@ -59,8 +56,6 @@ class EditImage(tables.LinkAction):
         if image:
             return image.status in ("active",) and \
                 image.owner == request.user.tenant_id
-        # We don't have bulk editing, so if there isn't an image that's
-        # authorized, don't allow the action.
         return False
 
 

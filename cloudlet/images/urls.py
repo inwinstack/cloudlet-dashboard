@@ -20,4 +20,5 @@ urlpatterns = [
     url(r'^create/$', views.CreateView.as_view(), name='create'),
     url(r'^(?P<image_id>[^/]+)/update/$', views.UpdateView.as_view(), name='update'),
     url(r'^(?P<image_id>[^/]+)/$', views.DetailView.as_view(), name='detail'),
+    url(r'^download/$', views.download_vm_overlay, name='download'),
 ]

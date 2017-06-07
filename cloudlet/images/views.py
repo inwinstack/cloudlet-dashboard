@@ -10,11 +10,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from django import shortcuts
+from django.http import HttpResponse
 from django.core.urlresolvers import reverse
 from django.core.urlresolvers import reverse_lazy
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
+from horizon import messages
 from horizon import forms
 from horizon import tabs
 from horizon.utils import memoized
@@ -145,3 +148,19 @@ class DetailView(tabs.TabView):
         image = self.get_data()
         return self.tab_group_class(request, image=image, **kwargs)
 
+
+def download_vm_overlay(request):
+    try:
+        image_id = request.GET.get('image_id', None)
+        image_name = request.GET.get('image_name', None)
+        if image_id is None:
+            raise
+        client = api.glance.glanceclient(request)
+        
+        body = client.images.data(image_id)
+        response = HttpResponse(body, content_type="application/octet-stream")
+        response['Content-Disposition'] = 'attachment; filename="%s"' % image_name
+        return response
+    except Exception, e:
+        messages.error(request, _('Error Downloading VM overlay: %s') % e)
+        return shortcuts.redirect(request.build_absolute_uri())
