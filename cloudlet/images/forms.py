@@ -121,7 +121,7 @@ class ImportBaseForm(forms.SelfHandlingForm):
         self.fields['is_public'].initial = False
 
     def clean(self):
-        data = super(CreateImageForm, self).clean()
+        data = super(ImportBaseForm, self).clean()
 
         # The image_file key can be missing based on particular upload
         # conditions. Code defensively for it here...
