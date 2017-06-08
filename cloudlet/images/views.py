@@ -19,7 +19,6 @@ from django.utils.translation import ugettext_lazy as _
 from horizon import exceptions
 from horizon import messages
 from horizon import forms
-from horizon import tabs
 from horizon.utils import memoized
 
 from openstack_dashboard import api
@@ -29,8 +28,6 @@ from openstack_dashboard.dashboards.project.cloudlet.images \
     import forms as project_forms
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import tables as project_tables
-from openstack_dashboard.dashboards.project.cloudlet.images \
-    import tabs as project_tabs
 
 
 class CreateView(forms.ModalFormView):
@@ -113,40 +110,6 @@ class UpdateView(forms.ModalFormView):
             disk_format = 'docker'
         data['disk_format'] = disk_format
         return data
-
-
-class DetailView(tabs.TabView):
-    tab_group_class = project_tabs.ImageDetailTabs
-    template_name = 'horizon/common/_detail.html'
-    page_title = "{{ image.name }}"
-
-    def get_context_data(self, **kwargs):
-        context = super(DetailView, self).get_context_data(**kwargs)
-        image = self.get_data()
-        table = project_tables.ImagesTable(self.request)
-        context["image"] = image
-        context["url"] = self.get_redirect_url()
-        context["actions"] = table.render_row_actions(image)
-        choices = project_tables.ImagesTable.STATUS_DISPLAY_CHOICES
-        image.status_label = filters.get_display_label(choices, image.status)
-        return context
-
-    @staticmethod
-    def get_redirect_url():
-        return reverse_lazy('horizon:project:cloudlet:index')
-
-    @memoized.memoized_method
-    def get_data(self):
-        try:
-            return api.glance.image_get(self.request, self.kwargs['image_id'])
-        except Exception:
-            exceptions.handle(self.request,
-                              _('Unable to retrieve image details.'),
-                              redirect=self.get_redirect_url())
-
-    def get_tabs(self, request, *args, **kwargs):
-        image = self.get_data()
-        return self.tab_group_class(request, image=image, **kwargs)
 
 
 def download_vm_overlay(request):
