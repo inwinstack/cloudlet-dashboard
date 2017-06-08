@@ -16,7 +16,7 @@ from openstack_dashboard.dashboards.project.cloudlet.images import views
 
 
 urlpatterns = [
-    url(r'^create/$', views.CreateView.as_view(), name='create'),
+    url(r'^import/$', views.ImportBaseView.as_view(), name='import'),
     url(r'^(?P<image_id>[^/]+)/update/$', views.UpdateView.as_view(), name='update'),
     url(r'^download/$', views.download_vm_overlay, name='download'),
 ]

@@ -63,7 +63,7 @@ class ImportBaseVM(tables.LinkAction):
     name = "import"
     verbose_name = _("Import Base VM")
     # modify
-    url = "horizon:project:cloudlet:images:create"
+    url = "horizon:project:cloudlet:images:import"
     classes = ("ajax-modal", "btn-create")
     icon = "plus"
 
@@ -83,10 +83,32 @@ class ResumeBaseVM(tables.LinkAction):
 
 
 class DeleteImage(tables.DeleteAction):
-    data_type_singular = _("Image")
-    data_type_plural = _("Images")
+    # NOTE: The bp/add-batchactions-help-text
+    # will add appropriate help text to some batch/delete actions.
+    help_text = _("Deleted images are not recoverable.")
+
+    @staticmethod
+    def action_present(count):
+        return ungettext_lazy(
+            u"Delete Image",
+            u"Delete Images",
+            count
+        )
+
+    @staticmethod
+    def action_past(count):
+        return ungettext_lazy(
+            u"Deleted Image",
+            u"Deleted Images",
+            count
+        )
+
+    policy_rules = (("image", "delete_image"),)
 
     def allowed(self, request, image=None):
+        # Protected images can not be deleted.
+        if image and image.protected:
+            return False
         if image:
             return image.owner == request.user.tenant_id
         # Return True to allow table-level bulk delete action to appear.

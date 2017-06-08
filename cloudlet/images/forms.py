@@ -67,7 +67,7 @@ def create_image_metadata(data, name, path, glance_ref=None):
     return meta
 
 
-class CreateImageForm(forms.SelfHandlingForm):
+class ImportBaseForm(forms.SelfHandlingForm):
     name = forms.CharField(
         max_length=255,
         label=_("Name"),
@@ -84,7 +84,7 @@ class CreateImageForm(forms.SelfHandlingForm):
         initial=True)
 
     def __init__(self, request, *args, **kwargs):
-        super(CreateImageForm, self).__init__(request, *args, **kwargs)
+        super(ImportBaseForm, self).__init__(request, *args, **kwargs)
 
         if (api.glance.get_image_upload_mode() == 'off' or
                 not policy.check((("image", "upload_image"),), request)):

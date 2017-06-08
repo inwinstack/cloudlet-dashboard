@@ -22,21 +22,18 @@ from horizon import forms
 from horizon.utils import memoized
 
 from openstack_dashboard import api
-from openstack_dashboard.utils import filters
 
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import forms as project_forms
-from openstack_dashboard.dashboards.project.cloudlet.images \
-    import tables as project_tables
 
 
-class CreateView(forms.ModalFormView):
-    form_class = project_forms.CreateImageForm
+class ImportBaseView(forms.ModalFormView):
+    form_class = project_forms.ImportBaseForm
     form_id = "import_basevm_form"
     modal_header = _("Import Base VM")
     submit_label = _("Import")
-    submit_url = reverse_lazy('horizon:project:cloudlet:images:create')
-    template_name = 'project/cloudlet/images/create.html'
+    submit_url = reverse_lazy('horizon:project:cloudlet:images:import')
+    template_name = 'project/cloudlet/images/import.html'
     context_object_name = 'image'
     success_url = reverse_lazy("horizon:project:cloudlet:index")
     page_title = _("Import Base VM")
@@ -59,7 +56,7 @@ class CreateView(forms.ModalFormView):
         return initial
 
     def get_context_data(self, **kwargs):
-        context = super(CreateView, self).get_context_data(**kwargs)
+        context = super(ImportBaseView, self).get_context_data(**kwargs)
         upload_mode = api.glance.get_image_upload_mode()
         context['image_upload_enabled'] = upload_mode != 'off'
         return context
