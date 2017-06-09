@@ -10,21 +10,27 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from django import shortcuts
-from django.http import HttpResponse
+
+from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.core.urlresolvers import reverse_lazy
+from django import http
+from django import shortcuts
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
-from horizon import messages
 from horizon import forms
+from horizon import messages
+from horizon import workflows
 from horizon.utils import memoized
 
 from openstack_dashboard import api
 
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import forms as project_forms
+from openstack_dashboard.dashboards.project.instances \
+    import workflows as project_workflows
+
 
 
 class ImportBaseView(forms.ModalFormView):
@@ -60,6 +66,19 @@ class ImportBaseView(forms.ModalFormView):
         upload_mode = api.glance.get_image_upload_mode()
         context['image_upload_enabled'] = upload_mode != 'off'
         return context
+
+
+class ResumeInstanceView(workflows.WorkflowView):
+    workflow_class = project_workflows.ResumeInstance
+    template_name = "project/cloudlet/instance/resume.html"
+
+    def get_initial(self):
+        initial = super(ResumeInstanceView, self).get_initial()
+        initial['project_id'] = self.request.user.tenant_id
+        initial['user_id'] = self.request.user.id
+        defaults = getattr(settings, 'LAUNCH_INSTANCE_DEFAULTS', {})
+        initial['config_drive'] = defaults.get('config_drive', False)
+        return initial
 
 
 class UpdateView(forms.ModalFormView):
@@ -118,7 +137,7 @@ def download_vm_overlay(request):
         client = api.glance.glanceclient(request)
 
         body = client.images.data(image_id)
-        response = HttpResponse(body, content_type="application/octet-stream")
+        response = http.HttpResponse(body, content_type="application/octet-stream")
         response['Content-Disposition'] = 'attachment; filename="%s"' % image_name
         return response
     except Exception, e:
