@@ -21,9 +21,9 @@ from horizon import forms
 from horizon import workflows
 
 from openstack_dashboard import api
+from openstack_dashboard.api import glance
 from openstack_dashboard.usage import quotas
 
-from openstack_dashboard.api import glance
 from openstack_dashboard.dashboards.project.cloudlet import utils
 
 

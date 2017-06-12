@@ -10,12 +10,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import os
 import math
+import os
 import zipfile
+
+from xml.etree import ElementTree
 from lxml import etree
 from tempfile import mkdtemp
-from xml.etree import ElementTree
 
 from openstack_dashboard import api
 

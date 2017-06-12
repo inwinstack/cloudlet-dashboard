@@ -10,9 +10,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import logging
 import os
 import shutil
-import logging
 
 from django.conf import settings
 from django.forms import ValidationError
@@ -25,7 +25,9 @@ from horizon import messages
 
 from openstack_dashboard import api
 from openstack_dashboard import policy
+
 from openstack_dashboard.dashboards.project.cloudlet import utils
+
 
 LOG = logging.getLogger(__name__)
 
