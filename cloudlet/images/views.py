@@ -28,7 +28,7 @@ from openstack_dashboard import api
 
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import forms as project_forms
-from openstack_dashboard.dashboards.project.instances \
+from openstack_dashboard.dashboards.project.cloudlet \
     import workflows as project_workflows
 
 
@@ -70,14 +70,13 @@ class ImportBaseView(forms.ModalFormView):
 
 class ResumeInstanceView(workflows.WorkflowView):
     workflow_class = project_workflows.ResumeInstance
-    template_name = "project/cloudlet/instance/resume.html"
 
     def get_initial(self):
         initial = super(ResumeInstanceView, self).get_initial()
         initial['project_id'] = self.request.user.tenant_id
         initial['user_id'] = self.request.user.id
-        defaults = getattr(settings, 'LAUNCH_INSTANCE_DEFAULTS', {})
-        initial['config_drive'] = defaults.get('config_drive', False)
+        # defaults = getattr(settings, 'LAUNCH_INSTANCE_DEFAULTS', {})
+        # initial['config_drive'] = defaults.get('config_drive', False)
         return initial
 
 

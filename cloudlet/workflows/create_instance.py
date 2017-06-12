@@ -140,7 +140,7 @@ class SetResumeDetailAction(workflows.Action):
         images = owned_images + public_images
         base_vms = list()
         for image in images:
-            if hasattr(images, 'properties') == True:
+            if hasattr(image, 'properties') == True:
                 properties = getattr(image, 'properties')
                 cloudlet_type = properties.get('cloudlet_type', None)
                 if cloudlet_type == 'cloudlet_base_disk':
@@ -166,19 +166,6 @@ class SetResumeDetailAction(workflows.Action):
             choices.insert(0, ("", _("No Base VM is available.")))
         return choices
 
-    def get_help_text(self):
-        extra = {}
-        try:
-            extra['usages'] = quotas.tenant_quota_usages(self.request)
-            extra['usages_json'] = json.dumps(extra['usages'])
-            flavors = json.dumps([f._info for f in
-                                  api.nova.flavor_list(self.request)])
-            extra['flavors'] = flavors
-        except Exception:
-            exceptions.handle(self.request,
-                              _("Unable to retrieve quota information."))
-        return super(SetResumeDetailAction, self).get_help_text(extra)
-
     def populate_keypair_id_choices(self, request, context):
         try:
             keypairs = api.nova.keypair_list(request)
@@ -197,7 +184,7 @@ class SetResumeDetailAction(workflows.Action):
 
     def populate_security_group_ids_choices(self, request, context):
         try:
-            groups = api.neutron.security_group_list(request)
+            groups = api.netwrok.security_group_list(request)
             security_group_list = [(sg.id, sg.name) for sg in groups]
         except Exception:
             exceptions.handle(request,
@@ -219,7 +206,8 @@ class SetResumeDetailAction(workflows.Action):
                     'base_resource_xml_str', None)
                 if libvirt_xml_str is None:
                     continue
-                cpu_count, memory_mb = utils.get_resource_size(libvirt_xml_str)
+                qemu_mem = utils.QemuMemory()
+                cpu_count, memory_mb = qemu_mem.get_resource_size(libvirt_xml_str)
                 disk_gb = basevm_image.min_disk
                 ret_flavors = utils.find_matching_flavor(flavors,
                                                    cpu_count,
@@ -235,6 +223,19 @@ class SetResumeDetailAction(workflows.Action):
             exceptions.handle(request,
                               _('Unable to retrieve instance flavors.'))
         return sorted(list(matching_flavors))
+
+    def get_help_text(self):
+        extra = {}
+        try:
+            extra['usages'] = quotas.tenant_quota_usages(self.request)
+            extra['usages_json'] = json.dumps(extra['usages'])
+            flavors = json.dumps([f._info for f in
+                                  api.nova.flavor_list(self.request)])
+            extra['flavors'] = flavors
+        except Exception:
+            exceptions.handle(self.request,
+                              _("Unable to retrieve quota information."))
+        return super(SetResumeDetailAction, self).get_help_text(extra)
 
 
 class SetResumeAction(workflows.Step):
@@ -258,7 +259,7 @@ class ResumeInstance(workflows.Workflow):
     success_url = "horizon:project:cloudlet:index"
     multipart = True
     default_steps = (SelectProjectUser,
-                     SetResumeAction,)
+                     SetResumeAction)
 
     def format_status_message(self, message):
         name = self.context.get('name', 'unknown instance')
