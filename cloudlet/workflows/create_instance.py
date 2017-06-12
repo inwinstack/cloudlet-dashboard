@@ -184,7 +184,7 @@ class SetResumeDetailAction(workflows.Action):
 
     def populate_security_group_ids_choices(self, request, context):
         try:
-            groups = api.netwrok.security_group_list(request)
+            groups = api.network.security_group_list(request)
             security_group_list = [(sg.id, sg.name) for sg in groups]
         except Exception:
             exceptions.handle(request,
