@@ -46,7 +46,6 @@ class DownloadImage(tables.LinkAction):
 class EditImage(tables.LinkAction):
     name = "edit"
     verbose_name = _("Edit Image")
-    # modify
     url = "horizon:project:cloudlet:images:update"
     classes = ("ajax-modal",)
     icon = "pencil"
@@ -62,7 +61,6 @@ class EditImage(tables.LinkAction):
 class ImportBaseVM(tables.LinkAction):
     name = "import"
     verbose_name = _("Import Base VM")
-    # modify
     url = "horizon:project:cloudlet:images:import"
     classes = ("ajax-modal", "btn-create")
     icon = "plus"
@@ -71,7 +69,6 @@ class ImportBaseVM(tables.LinkAction):
 class ResumeBaseVM(tables.LinkAction):
     name = "resume_base_vm"
     verbose_name = _("Resume Base VM")
-    # modify
     url = "horizon:project:cloudlet:images:resume"
     classes = ("btn-launch", "ajax-modal")
 
