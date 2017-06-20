@@ -123,6 +123,7 @@ class CreateOverlayAction(tables.BatchAction):
 class VMSynthesisLink(tables.LinkAction):
     name = "synthesis"
     verbose_name = _("Start VM Synthesis")
+    # modify
     url = "horizon:project:cloudlet:synthesis"
     classes = ("btn-launch", "ajax-modal")
     icon = "plus"
@@ -184,6 +185,7 @@ class EditInstance(policy.PolicyTargetMixin, tables.LinkAction):
 class VMHandoffLink(tables.LinkAction):
     name = "handoff"
     verbose_name = _("VM Handoff")
+    # modify
     url = "horizon:project:cloudlet:handoff"
     classes = ("btn-danger", "btn-terminate", "ajax-modal",)
     icon = "pencil"

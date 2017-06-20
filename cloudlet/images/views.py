@@ -10,7 +10,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-
 from django import http
 from django import shortcuts
 from django.core.urlresolvers import reverse
@@ -27,9 +26,6 @@ from openstack_dashboard import api
 
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import forms as project_forms
-from openstack_dashboard.dashboards.project.cloudlet \
-    import workflows as project_workflows
-
 
 
 class ImportBaseView(forms.ModalFormView):
@@ -65,18 +61,6 @@ class ImportBaseView(forms.ModalFormView):
         upload_mode = api.glance.get_image_upload_mode()
         context['image_upload_enabled'] = upload_mode != 'off'
         return context
-
-
-class ResumeInstanceView(workflows.WorkflowView):
-    workflow_class = project_workflows.ResumeInstance
-
-    def get_initial(self):
-        initial = super(ResumeInstanceView, self).get_initial()
-        initial['project_id'] = self.request.user.tenant_id
-        initial['user_id'] = self.request.user.id
-        # defaults = getattr(settings, 'LAUNCH_INSTANCE_DEFAULTS', {})
-        # initial['config_drive'] = defaults.get('config_drive', False)
-        return initial
 
 
 class UpdateView(forms.ModalFormView):

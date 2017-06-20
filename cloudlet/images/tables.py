@@ -69,7 +69,7 @@ class ImportBaseVM(tables.LinkAction):
 class ResumeBaseVM(tables.LinkAction):
     name = "resume_base_vm"
     verbose_name = _("Resume Base VM")
-    url = "horizon:project:cloudlet:images:resume"
+    url = "horizon:project:cloudlet:instances:resume"
     classes = ("btn-launch", "ajax-modal")
 
     def get_link_url(self, datum):

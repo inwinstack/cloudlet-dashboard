@@ -15,6 +15,8 @@ from django.conf.urls import url
 
 from openstack_dashboard.dashboards.project.cloudlet.images \
     import urls as image_urls
+from openstack_dashboard.dashboards.project.cloudlet.instances \
+    import urls as instance_urls
 from openstack_dashboard.dashboards.project.cloudlet \
     import views
 
@@ -22,4 +24,5 @@ from openstack_dashboard.dashboards.project.cloudlet \
 urlpatterns = [
     url(r'^$', views.IndexView.as_view(), name='index'),
     url(r'', include(image_urls, namespace='images')),
+    url(r'', include(instance_urls, namespace='instances')),
 ]

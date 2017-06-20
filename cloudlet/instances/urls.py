@@ -12,11 +12,10 @@
 
 from django.conf.urls import url
 
-from openstack_dashboard.dashboards.project.cloudlet.images import views
+from openstack_dashboard.dashboards.project.cloudlet.instances import views
 
 
 urlpatterns = [
-    url(r'^import/$', views.ImportBaseView.as_view(), name='import'),
-    url(r'^(?P<image_id>[^/]+)/update/$', views.UpdateView.as_view(), name='update'),
-    url(r'^download/$', views.download_vm_overlay, name='download'),
+    url(r'^resume/$', views.ResumeInstanceView.as_view(), name='resume'),
+    url(r'^synthesis/$', views.SynthesisInstanceView.as_view(), name='synthesis'),
 ]
