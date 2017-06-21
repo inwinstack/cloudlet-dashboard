@@ -101,6 +101,10 @@ class BaseVMs():
 
         for image in image_detail:
             properties = getattr(image, "properties")
+            if properties is None or len(properties) == 0:
+                continue
+            if properties.get("cloudlet_type") != "cloudlet_base_disk":
+                continue
             base_sha256_uuid = properties.get("base_sha256_uuid")
             if base_sha256_uuid == base_hashvalue:
                 return image

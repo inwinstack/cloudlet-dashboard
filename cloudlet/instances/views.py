@@ -12,8 +12,8 @@
 
 from horizon import workflows
 
-from openstack_dashboard.dashboards.project.cloudlet \
-    import workflows as project_workflows
+from openstack_dashboard.dashboards.project.cloudlet.workflows \
+    import create_instance as project_workflows
 
 
 class ResumeInstanceView(workflows.WorkflowView):
@@ -30,7 +30,6 @@ class ResumeInstanceView(workflows.WorkflowView):
 
 class SynthesisInstanceView(workflows.WorkflowView):
     workflow_class = project_workflows.SynthesisInstance
-    template_name = "project/cloudlet/instance/launch.html"
 
     def get_initial(self):
         initial = super(SynthesisInstanceView, self).get_initial()

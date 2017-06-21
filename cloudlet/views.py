@@ -112,6 +112,7 @@ class IndexView(tables.MultiTableView):
             exceptions.handle(self.request,
                               _('Unable to retrieve instances.'))
 
+        filtered_instances = list()
         if instances:
             try:
                 api.network.servers_update_addresses(self.request, instances)
@@ -122,7 +123,6 @@ class IndexView(tables.MultiTableView):
                     ignore=True)
 
             # Gather our flavors and images and correlate our instances to them
-            filtered_instances = list()
             try:
                 flavors = api.nova.flavor_list(self.request)
             except Exception:

@@ -316,6 +316,7 @@ class SetSynthesizeDetailsAction(workflows.Action):
         widget=forms.CheckboxSelectMultiple(),
         help_text=_("Launch instance in these "
                     "security groups."))
+
     flavor = forms.ChoiceField(label=_("Flavor"),
                                required=True,
                                help_text=_("Size of image to launch."))
@@ -354,32 +355,26 @@ class SetSynthesizeDetailsAction(workflows.Action):
         # finally check the header file of VM overlay
         # to make sure that associated Base VM exists
         matching_image = None
-        requested_basevm_sha256 = ''
+        # requested_basevm_sha256 = ''
         try:
             overlay_package = VMOverlayPackage(overlay_url)
             metadata = overlay_package.read_meta()
             overlay_meta = msgpack.unpackb(metadata)
             requested_basevm_sha256 = overlay_meta.get(Cloudlet_Const.META_BASE_VM_SHA256, None)
             # matching_image = utils.find_basevm_by_sha256(self.request, requested_basevm_sha256)
+            basevms = utils.BaseVMs()
+            matching_image = basevms.is_exist(self.request, requested_basevm_sha256)
         except Exception:
             msg = "Error while finding matching Base VM with %s" % (requested_basevm_sha256)
             raise forms.ValidationError(_(msg))
 
-        if matching_image == None:
+        if matching_image is None:
             msg = "Cannot find matching base VM with UUID(%s)" % (requested_basevm_sha256)
             raise forms.ValidationError(_(msg))
         else:
             # specify associated base VM from the metadata
             cleaned_data['image_id'] = str(matching_image.id)
             return cleaned_data
-
-        # if matching_image == None:
-        #     msg = "Caanot find matching base VM with UUID(%s)" % (requested_basevm_sha256)
-        #     raise forms.ValidationError(_(msg))
-        # else:
-        #     # specify associated base VM from the metadata
-        #     cleaned_data['image_id'] = str(matching_image.id)
-        #     return cleaned_data
 
     def populate_keypair_id_choices(self, request, context):
         try:
@@ -530,3 +525,35 @@ class SynthesisInstance(workflows.Workflow):
     success_url = "horizon:project:cloudlet:index"
     default_steps = (SelectProjectUser,
                      SetSynthesizeAction,)
+
+    def format_status_message(self, message):
+        name = self.context.get('name', 'unknown instance')
+        count = self.context.get('count', 1)
+        if int(count) > 1:
+            return message % {"count": _("%s instances") % count,
+                              "name": name}
+        else:
+            return message % {"count": _("instance"), "name": name}
+
+    def handle(self, request, context):
+        # dev_mapping = None
+        # user_script = None
+        try:
+            # TODO: call cloudlet api to synthesis vm
+            # ret_json = cloudlet_api.request_synthesis(
+            #     request,
+            #     context['name'],
+            #     context['image_id'],
+            #     context['flavor'],
+            #     context['keypair_id'],
+            #     context['security_group_ids'],
+            #     context['overlay_url'],
+            # )
+            # error_msg = ret_json.get("badRequest", None)
+            # if error_msg is not None:
+            #     msg = error_msg.get("message", "Failed to request VM synthesis")
+            #     raise Exception(msg)
+            return True
+        except:
+            exceptions.handle(request)
+            return False

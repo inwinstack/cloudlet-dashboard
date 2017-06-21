@@ -124,7 +124,7 @@ class VMSynthesisLink(tables.LinkAction):
     name = "synthesis"
     verbose_name = _("Start VM Synthesis")
     # modify
-    url = "horizon:project:cloudlet:synthesis"
+    url = "horizon:project:cloudlet:instances:synthesis"
     classes = ("btn-launch", "ajax-modal")
     icon = "plus"
 
