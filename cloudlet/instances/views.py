@@ -10,8 +10,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from django.core.urlresolvers import reverse_lazy
+from django.utils.translation import ugettext_lazy as _
+
+from horizon import forms
 from horizon import workflows
 
+from openstack_dashboard import api
+from openstack_dashboard.dashboards.project.cloudlet.instances \
+    import forms as project_forms
 from openstack_dashboard.dashboards.project.cloudlet.workflows \
     import create_instance as project_workflows
 
@@ -36,3 +43,20 @@ class SynthesisInstanceView(workflows.WorkflowView):
         initial['project_id'] = self.request.user.tenant_id
         initial['user_id'] = self.request.user.id
         return initial
+
+
+class HandoffInstanceView(forms.ModalFormView):
+    form_class = project_forms.HandoffInstanceForm
+    form_id = "handoff_instance"
+    modal_header = _("Handoff VM instance")
+    submit_label = _("Handoff VM instance")
+    submit_url = "horizon:project:cloudlet:instances:handoff"
+    template_name = 'project/cloudlet/instance/handoff.html'
+    success_url = reverse_lazy("horizon:project:cloudlet:index")
+    page_title = _("Handoff Instance")
+
+    def get_context_data(self, **kwargs):
+        context = super(HandoffInstanceView, self).get_context_data(**kwargs)
+        context['instance_id'] = self.kwargs['instance_id']
+        context['can_set_server_password'] = api.nova.can_set_server_password()
+        return context

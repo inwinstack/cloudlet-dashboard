@@ -123,7 +123,6 @@ class CreateOverlayAction(tables.BatchAction):
 class VMSynthesisLink(tables.LinkAction):
     name = "synthesis"
     verbose_name = _("Start VM Synthesis")
-    # modify
     url = "horizon:project:cloudlet:instances:synthesis"
     classes = ("btn-launch", "ajax-modal")
     icon = "plus"
@@ -185,8 +184,7 @@ class EditInstance(policy.PolicyTargetMixin, tables.LinkAction):
 class VMHandoffLink(tables.LinkAction):
     name = "handoff"
     verbose_name = _("VM Handoff")
-    # modify
-    url = "horizon:project:cloudlet:handoff"
+    url = "horizon:project:cloudlet:instances:handoff"
     classes = ("btn-danger", "btn-terminate", "ajax-modal",)
     icon = "pencil"
 
@@ -200,7 +198,8 @@ class VMHandoffLink(tables.LinkAction):
         cloudlet_type = utils.get_cloudlet_type(instance)
         if cloudlet_type =='cloudlet_overlay':
             is_synthesized = True
-        return is_synthesized
+        # return is_synthesized
+        return True
 
 
 def instance_fault_to_friendly_message(instance):
@@ -467,6 +466,6 @@ class InstancesTable(tables.DataTable):
         hidden_title = False
         row_class = UpdateRow
         table_actions = (VMSynthesisLink,)
-        row_actions = (CreateOverlayAction, VMHandoffLink,
-                       EditInstance, DeleteInstance)
+        row_actions = (CreateOverlayAction, EditInstance,
+                       VMHandoffLink, DeleteInstance)
 

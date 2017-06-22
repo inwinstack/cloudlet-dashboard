@@ -15,7 +15,10 @@ from django.conf.urls import url
 from openstack_dashboard.dashboards.project.cloudlet.instances import views
 
 
+INSTANCES = r'^(?P<instance_id>[^/]+)/%s$'
+
 urlpatterns = [
     url(r'^resume/$', views.ResumeInstanceView.as_view(), name='resume'),
     url(r'^synthesis/$', views.SynthesisInstanceView.as_view(), name='synthesis'),
+    url(INSTANCES % 'handoff', views.HandoffInstanceView.as_view(), name='handoff'),
 ]
