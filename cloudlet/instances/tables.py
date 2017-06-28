@@ -188,10 +188,6 @@ class VMHandoffLink(tables.LinkAction):
     classes = ("btn-danger", "btn-terminate", "ajax-modal",)
     icon = "pencil"
 
-    def get_link_url(self, datum):
-        instance_id = self.table.get_object_id(datum)
-        return urlresolvers.reverse(self.url, args=[instance_id])
-
     def allowed(self, request, instance=None):
         is_active = instance.status in ACTIVE_STATES
         is_synthesized = False
@@ -200,6 +196,10 @@ class VMHandoffLink(tables.LinkAction):
             is_synthesized = True
         # return is_synthesized
         return True
+
+    def get_link_url(self, datum):
+        instance_id = self.table.get_object_id(datum)
+        return urlresolvers.reverse(self.url, args=[instance_id])
 
 
 def instance_fault_to_friendly_message(instance):

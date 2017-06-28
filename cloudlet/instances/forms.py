@@ -10,6 +10,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import httplib
+import json
+
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
@@ -50,10 +53,58 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         super(HandoffInstanceForm, self).__init__(request, *args, **kwargs)
         self.instance_id = kwargs.get('initial', {}).get('instance_id')
 
-    # @staticmethod
-    # def _get_token(dest_addr, user, password, tenant_name):
-    #     if dest_addr.endswith("/"):
-    #         dest_addr = dest_addr[-1:]
+    @staticmethod
+    def _get_token(dest_addr, user, password, tenant_name):
+        if dest_addr.endswith("/"):
+            dest_addr = dest_addr[:-1]
+        params = {
+            "auth": {
+                "identity": {
+                    "methods": ["password"],
+                    "password": {
+                        "user": {
+                            "name": user,
+                            "domain": {"id": "default"},
+                            "password": password
+                        }
+                    }
+                },
+                "scope": {
+                    "project": {
+                        "name": tenant_name,
+                        "domain": {"id": "default"}
+                    }
+                }
+            }
+        }
+        headers = {"Content-Type": "application/json"}
+
+        # HTTP connection
+        conn = httplib.HTTPConnection(dest_addr)
+        conn.request("POST", "/v3/auth/tokens", json.dumps(params), headers)
+
+        # HTTP response
+        response = conn.getresponse()
+        api_token = response.getheader('x-subject-token')
+        data = response.read()
+        dd = json.loads(data)
+        conn.close()
+        try:
+            nova_endpoint = None
+            glance_endpoint = None
+            service_list = dd['token']['catalog']
+            for service in service_list:
+                if service['name'] == "nova":
+                    for endpoint in service['endpoints']:
+                        if endpoint['interface'] == "public":
+                            nova_endpoint = endpoint['url']
+                elif service['name'] == "glance":
+                    for endpoint in service['endpoints']:
+                        if endpoint['interface'] == "public":
+                            glance_endpoint = endpoint['url']
+        except KeyError as e:
+            raise
+        return api_token, nova_endpoint, glance_endpoint
 
     def clean(self):
         cleaned_data = super(HandoffInstanceForm, self).clean()
@@ -70,12 +121,24 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
             msg = "Need URL to fetch VM overlay"
             raise forms.ValidationError(_(msg))
 
+        # get token of the destination
+        try:
+            dest_token, dest_nova_endpoint, dest_glance_endpoint = \
+                self._get_token(dest_addr, dest_account,
+                                dest_password, dest_tenant)
+            cleaned_data['dest_token'] = dest_token
+            cleaned_data['dest_nova_endpoint'] = dest_nova_endpoint
+            cleaned_data['dest_glance_endpoint'] = dest_glance_endpoint
+            cleaned_data['instance_id'] = self.instance_id
+        except Exception as e:
+            msg = "Cannot get Auth-token from %s" % dest_addr
+            raise forms.ValidationError(_(msg))
+        print cleaned_data
         return cleaned_data
 
-    def get_help_text(self):
-        return super(HandoffInstanceForm, self).get_help_text()
-
     def handle(self, request, context):
+        print "FORM HANDLE"
+        print context
         try:
             print "Start Handoff"
             return True

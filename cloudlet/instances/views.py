@@ -47,16 +47,18 @@ class SynthesisInstanceView(workflows.WorkflowView):
 
 class HandoffInstanceView(forms.ModalFormView):
     form_class = project_forms.HandoffInstanceForm
-    form_id = "handoff_instance"
-    modal_header = _("Handoff VM instance")
-    submit_label = _("Handoff VM instance")
-    submit_url = "horizon:project:cloudlet:instances:handoff"
     template_name = 'project/cloudlet/instance/handoff.html'
     success_url = reverse_lazy("horizon:project:cloudlet:index")
     page_title = _("Handoff Instance")
+    submit_label = page_title
 
     def get_context_data(self, **kwargs):
         context = super(HandoffInstanceView, self).get_context_data(**kwargs)
         context['instance_id'] = self.kwargs['instance_id']
         context['can_set_server_password'] = api.nova.can_set_server_password()
+        print "Form view data"
+        print context
         return context
+
+    def get_initial(self):
+        return {'instance_id': self.kwargs['instance_id']}
