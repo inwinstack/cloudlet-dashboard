@@ -116,7 +116,8 @@ class CreateOverlayAction(tables.BatchAction):
         return is_active and is_resumed_base
 
     def action(self, request, obj_id):
-        print 'call cloudlet api with create overlay'
+        # TODO: call cloudlet api to create overlay
+        print 'call cloudlet api to create overlay'
         # ret_dict = cloudlet_api.request_create_overlay(request, obj_id)
 
 
@@ -192,10 +193,9 @@ class VMHandoffLink(tables.LinkAction):
         is_active = instance.status in ACTIVE_STATES
         is_synthesized = False
         cloudlet_type = utils.get_cloudlet_type(instance)
-        if cloudlet_type =='cloudlet_overlay':
+        if cloudlet_type == 'cloudlet_overlay':
             is_synthesized = True
-        # return is_synthesized
-        return True
+        return is_synthesized
 
     def get_link_url(self, datum):
         instance_id = self.table.get_object_id(datum)
@@ -468,4 +468,3 @@ class InstancesTable(tables.DataTable):
         table_actions = (VMSynthesisLink,)
         row_actions = (CreateOverlayAction, EditInstance,
                        VMHandoffLink, DeleteInstance)
-

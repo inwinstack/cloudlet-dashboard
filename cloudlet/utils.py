@@ -29,14 +29,14 @@ def get_cloudlet_type(instance):
     request = instance.request
     image_id = getattr(instance.image, 'id', None)
     metadata = instance.metadata
+    # TODO: glance versoin v1 and v2 is different, so it will change.
     try:
         if image_id is not None:
             image = api.glance.image_get(request, image_id)
             if hasattr(image, 'properties') != True:
                 return None
             properties = getattr(image, 'properties')
-            if properties == None or \
-                properties.get('is_cloudlet') == None:
+            if properties is None or properties.get('is_cloudlet') is None:
                 return None
 
             # now it's either resumed base instance or synthesized instance

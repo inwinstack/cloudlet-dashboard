@@ -1,43 +1,48 @@
 # Cloudlet-dashboard
-Custom Cloudlet OpenStack Dashboard
+Horizon plugin for Cloudlet.
 
-## 事前安裝
-1. OpenStack (目前 Newton)
 
-## 安裝 elijah-provisioning
-下載 elijah-provisioning：
+## Tested Platform
+We have tested `Cloudlet-dashboard` on **Ubuntu 16.04 LTS** using the **Devstack stable/newton** branch.
+
+## Installation
+This repository is OpenStack extension for cloudlet. Therefore, you need to install OpenStack and [cloudlet library](https://github.com/cmusatyalab/elijah-provisioning) before installing this extension.
+
+### 1. Install cloudlet library
+Download the `elijah-provisioning` repository：
 ```sh
 $ git clone https://github.com/ellis-wu/elijah-provisioning.git
 ```
 
-安裝 fabric openssh-server package：
+Install the `fabric` and `openssh-server`：
 ```sh
 $ sudo apt-get install -y fabric openssh-server
 ```
 
-安裝 elijah-provisioning
+Install `cloudlet library`：
 ```sh
 $ cd elijah-provisioning/
 $ fab install
 (Type your Ubuntu account password when it is asked)
 ```
 
-## 安裝 cloudlet-dashboard
-下載 cloudlet-dashboard：
+## 2. Install cloudlet-dashboard
+Download the `cloudlet-dashboard` repository and change the `dev` branch：
 ```sh
 $ git clone https://github.com/ellis-wu/cloudlet-dashboard.git
+$ git checkout dev
 ```
 
-放置檔案至正確目錄：
+Move the files to the correct folder：
 ```sh
 $ cd cloudlet-dashboard
 $ cp -r cloudlet/ /opt/stack/horizon/openstack_dashboard/dashboards/project/
 $ cp enabled/_1080_project_cloudlet_panel.py /opt/stack/horizon/openstack_dashboard/enabled/
 ```
 
-重啟 `apache2`：
+Restart `apache2` service：
 ```sh
 $ sudo service apache2 restart
 ```
 
-重新整理 OpenStack Dashboard 就會看到 Cloudlet 已加入其中。
+If your finished, you can open the OpenStack Dashboard and see the Cloudlet add to Dashboard.
