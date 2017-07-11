@@ -101,10 +101,6 @@ class SetResumeDetailAction(workflows.Action):
     network = forms.MultipleChoiceField(
         label=_("Networks"),
         widget=forms.ThemableCheckboxSelectMultiple(),
-        error_message={
-            'required': _(
-                "At least one network must"
-                " be specified.")},
         help_text=_("Launch instance with"
                     " these networks"))
 
@@ -363,10 +359,6 @@ class SetSynthesizeDetailsAction(workflows.Action):
     network = forms.MultipleChoiceField(
         label=_("Networks"),
         widget=forms.ThemableCheckboxSelectMultiple(),
-        error_message={
-            'required': _(
-                "At least one network must"
-                " be specified.")},
         help_text=_("Launch instance with"
                     " these networks"))
 
