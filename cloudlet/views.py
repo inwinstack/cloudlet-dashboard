@@ -90,18 +90,21 @@ class IndexView(tables.MultiTableView):
                 images_tables.VMOverlaysTable._meta.pagination_param, None)
         reversed_order = prev_marker is not None
         try:
-            images, self._more, self._prev = api.glance.image_list_detailed(
+            all_snaps, self._more, self._prev = api.glance.image_list_detailed(
                 self.request,
                 marker=marker,
                 paginate=True,
                 sort_dir='asc',
                 sort_key='name',
                 reversed_order=reversed_order)
+            snaps = [im for im in all_snaps \
+                     if (im.properties.get("cloudlet_type", None) == "cloudlet_overlay")
+                            and (im.owner == self.request.user.tenant_id)]
         except Exception:
             images = []
             self._prev = self._more = False
             exceptions.handle(self.request, _("Unable to retrieve images."))
-        return images
+        return snaps
 
     def get_instances_data(self):
         try:

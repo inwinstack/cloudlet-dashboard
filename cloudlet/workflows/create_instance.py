@@ -10,9 +10,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import httplib
 import json
 import logging
 import requests
+from urlparse import urlparse
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -25,9 +27,12 @@ from horizon import workflows
 
 from openstack_dashboard import api
 from openstack_dashboard.api import glance
+from openstack_dashboard.api.base import url_for
 from openstack_dashboard.usage import quotas
 
 from openstack_dashboard.dashboards.project.cloudlet import utils
+from openstack_dashboard.dashboards.project.instances \
+    import utils as instance_utils
 
 from elijah.provisioning.configuration import Const as Cloudlet_Const
 from elijah.provisioning.package import VMOverlayPackage
@@ -92,6 +97,16 @@ class SetResumeDetailAction(workflows.Action):
         label=_("Flavor"),
         required=True,
         help_text=_("Size of image to launch."))
+
+    network = forms.MultipleChoiceField(
+        label=_("Networks"),
+        widget=forms.ThemableCheckboxSelectMultiple(),
+        error_message={
+            'required': _(
+                "At least one network must"
+                " be specified.")},
+        help_text=_("Launch instance with"
+                    " these networks"))
 
     class Meta:
         name = _("Base VM Info")
@@ -234,6 +249,9 @@ class SetResumeDetailAction(workflows.Action):
                               _('Unable to retrieve instance flavors.'))
         return sorted(list(matching_flavors))
 
+    def populate_network_choices(self, request, context):
+        return instance_utils.network_field_data(request)
+
     def get_help_text(self):
         extra = {}
         try:
@@ -250,7 +268,7 @@ class SetResumeDetailAction(workflows.Action):
 
 class SetResumeAction(workflows.Step):
     action_class = SetResumeDetailAction
-    contributes = ("image_id", "name", "security_group_ids", "flavor", "keypair_id")
+    contributes = ("image_id", "name", "security_group_ids", "flavor", "keypair_id", "network")
 
     def prepare_action_context(self, request, context):
         source_type = request.GET.get("source_type", None)
@@ -283,6 +301,27 @@ class ResumeInstance(workflows.Workflow):
     def handle(self, request, context):
         dev_mapping = None
         user_script = None
+
+        netids = context.get('network', None)
+        if netids:
+            nics = [{"net-id": netid, "v4-fixed-ip": ""}
+                    for netid in netids]
+        else:
+            nics = None
+
+        port_profiles_supported = api.neutron.is_port_profiles_supported()
+
+        if port_profiles_supported:
+            nics = self.set_network_port_profiles(request,
+                                                  context['network_id'],
+                                                  context['profile_id'])
+
+        ports = context.get('ports')
+        if ports:
+            if nics is None:
+                nics = []
+            nics.extend([{'port-id': port} for port in ports])
+
         try:
             api.nova.server_create(request,
                                    context['name'],
@@ -292,7 +331,7 @@ class ResumeInstance(workflows.Workflow):
                                    user_script,
                                    context['security_group_ids'],
                                    dev_mapping,
-                                   nics=None,
+                                   nics=nics,
                                    instance_count=1,
                                    )
             return True
@@ -320,6 +359,16 @@ class SetSynthesizeDetailsAction(workflows.Action):
     flavor = forms.ChoiceField(label=_("Flavor"),
                                required=True,
                                help_text=_("Size of image to launch."))
+
+    network = forms.MultipleChoiceField(
+        label=_("Networks"),
+        widget=forms.ThemableCheckboxSelectMultiple(),
+        error_message={
+            'required': _(
+                "At least one network must"
+                " be specified.")},
+        help_text=_("Launch instance with"
+                    " these networks"))
 
     class Meta:
         name = _("VM overlay Info")
@@ -497,6 +546,9 @@ class SetSynthesizeDetailsAction(workflows.Action):
                               _('Unable to retrieve instance flavors.'))
         return sorted(list(matching_flavors))
 
+    def populate_network_choices(self, request, context):
+        return instance_utils.network_field_data(request)
+
     def get_help_text(self):
         extra = {}
         try:
@@ -513,7 +565,7 @@ class SetSynthesizeDetailsAction(workflows.Action):
 
 class SetSynthesizeAction(workflows.Step):
     action_class = SetSynthesizeDetailsAction
-    contributes = ("image_id", "overlay_url", "name", "security_group_ids", "flavor", "keypair_id")
+    contributes = ("image_id", "overlay_url", "name", "security_group_ids", "flavor", "keypair_id", "network")
 
 
 class SynthesisInstance(workflows.Workflow):
@@ -539,20 +591,35 @@ class SynthesisInstance(workflows.Workflow):
         # dev_mapping = None
         # user_script = None
         try:
-            # TODO: call cloudlet api to synthesis vm
-            # ret_json = cloudlet_api.request_synthesis(
-            #     request,
-            #     context['name'],
-            #     context['image_id'],
-            #     context['flavor'],
-            #     context['keypair_id'],
-            #     context['security_group_ids'],
-            #     context['overlay_url'],
-            # )
-            # error_msg = ret_json.get("badRequest", None)
-            # if error_msg is not None:
-            #     msg = error_msg.get("message", "Failed to request VM synthesis")
-            #     raise Exception(msg)
+            # TODO: This is not the correct way to use the Synthesis API.
+            token = request.user.token.id
+            management_url = url_for(request, 'compute')
+            end_point = urlparse(management_url)
+
+            # other data
+            meta_data = {"overlay_url": context['overlay_url']}
+            s = {
+                "server": {
+                    "name": context['name'], "imageRef": context['image_id'],
+                    "flavorRef": context['flavor'], "metadata": meta_data,
+                    "min_count": "1", "max_count": "1",
+                    "security_group": context['security_group_ids'],
+                    "key_name": context['keypair_id'],
+                }}
+            params = json.dumps(s)
+            headers = {"X-Auth-Token": token, "Content-type": "application/json"}
+
+            conn = httplib.HTTPConnection(end_point[1])
+            conn.request("POST", "%s/servers" % end_point[2], params, headers)
+            response = conn.getresponse()
+            data = response.read()
+            dd = json.loads(data)
+            conn.close()
+
+            error_msg = dd.get("badRequest", None)
+            if error_msg is not None:
+                msg = error_msg.get("message", "Failed to request VM synthesis")
+                raise Exception(msg)
             return True
         except:
             exceptions.handle(request)
