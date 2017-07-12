@@ -428,8 +428,6 @@ class ResumeInstance(workflows.Workflow):
             nics.extend([{'port-id': port} for port in ports])
 
         try:
-            print "RESUME CONTEXT"
-            print context
             api.nova.server_create(request,
                                    context['name'],
                                    context['image_id'],
@@ -650,11 +648,33 @@ class SynthesisInstance(workflows.Workflow):
         else:
             return message % {"count": _("instance"), "name": name}
 
+    @sensitive_variables('context')
     def handle(self, request, context):
         # dev_mapping = None
         # user_script = None
+        netids = context.get('network_id', None)
+        if netids:
+            nics = [{"net-id": netid, "v4-fixed-ip": ""}
+                    for netid in netids]
+        else:
+            nics = None
+
+        port_profiles_supported = api.neutron.is_port_profiles_supported()
+
+        if port_profiles_supported:
+            nics = self.set_network_port_profiles(request,
+                                                  context['network_id'],
+                                                  context['profile_id'])
+
+        ports = context.get('ports')
+        if ports:
+            if nics is None:
+                nics = []
+            nics.extend([{'port-id': port} for port in ports])
+
         try:
-            # TODO: This is not the correct way to use the Synthesis API.
+            # (Change) This is not the correct way to use the Synthesis API.
+            #          And no add neutorn network with cloudlet_api.
             ret_json = cloudlet_api.request_synthesis(
                 request,
                 context['name'],

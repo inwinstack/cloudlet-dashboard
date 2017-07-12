@@ -141,6 +141,8 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
 
     def handle(self, request, context):
         try:
+            # (Change) This is not the correct way to use the Handoff API.
+            #          And no add neutorn network with cloudlet_api.
             ret_json = cloudlet_api.request_handoff(
                 request,
                 context['instance_id'],
