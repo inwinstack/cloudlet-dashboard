@@ -650,8 +650,8 @@ class SynthesisInstance(workflows.Workflow):
 
     @sensitive_variables('context')
     def handle(self, request, context):
-        # dev_mapping = None
-        # user_script = None
+        dev_mapping = None
+        user_script = None
         netids = context.get('network_id', None)
         if netids:
             nics = [{"net-id": netid, "v4-fixed-ip": ""}
@@ -672,22 +672,19 @@ class SynthesisInstance(workflows.Workflow):
                 nics = []
             nics.extend([{'port-id': port} for port in ports])
 
+        meta = {"overlay_url": context['overlay_url']}
         try:
-            # (Change) This is not the correct way to use the Synthesis API.
-            #          And no add neutorn network with cloudlet_api.
-            ret_json = cloudlet_api.request_synthesis(
-                request,
-                context['name'],
-                context['image_id'],
-                context['flavor'],
-                context['keypair_id'],
-                context['security_group_ids'],
-                context['overlay_url'],
-            )
-            error_msg = ret_json.get("badRequest", None)
-            if error_msg is not None:
-                msg = error_msg.get("message", "Failed to request VM synthesis")
-                raise Exception(msg)
+            api.nova.server_create(request,
+                                   context['name'],
+                                   context['image_id'],
+                                   context['flavor'],
+                                   context['keypair_id'],
+                                   user_script,
+                                   context['security_group_ids'],
+                                   dev_mapping,
+                                   nics=nics,
+                                   instance_count=1,
+                                   meta=meta)
             return True
         except:
             exceptions.handle(request)
