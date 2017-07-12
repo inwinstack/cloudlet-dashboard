@@ -18,9 +18,10 @@ from horizon.utils import filters
 
 from openstack_dashboard import api
 from openstack_dashboard import policy
+from openstack_dashboard.dashboards.project.cloudlet import cloudlet_api
+from openstack_dashboard.dashboards.project.cloudlet import utils
 from openstack_dashboard.dashboards.project.instances.workflows \
     import update_instance
-from openstack_dashboard.dashboards.project.cloudlet import utils
 
 
 LOG = logging.getLogger(__name__)
@@ -117,8 +118,7 @@ class CreateOverlayAction(tables.BatchAction):
 
     def action(self, request, obj_id):
         # TODO: call cloudlet api to create overlay
-        print 'call cloudlet api to create overlay'
-        # ret_dict = cloudlet_api.request_create_overlay(request, obj_id)
+        ret_dict = cloudlet_api.request_create_overlay(request, obj_id)
 
 
 class VMSynthesisLink(tables.LinkAction):

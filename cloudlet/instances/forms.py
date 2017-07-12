@@ -18,6 +18,9 @@ from django.utils.translation import ugettext_lazy as _
 from horizon import exceptions
 from horizon import forms
 
+from openstack_dashboard.dashboards.project.cloudlet import cloudlet_api
+
+
 class HandoffInstanceForm(forms.SelfHandlingForm):
     dest_addr = forms.CharField(
         max_length=255,
@@ -137,10 +140,20 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         return cleaned_data
 
     def handle(self, request, context):
-        print "FORM HANDLE"
-        print context
         try:
-            print "Start Handoff"
+            ret_json = cloudlet_api.request_handoff(
+                request,
+                context['instance_id'],
+                context['dest_nova_endpoint'],
+                context['dest_token'],
+                context['dest_vmname']
+            )
+            error_msg = ret_json.get("badRequest", None)
+            if error_msg is not None:
+                msg = error_msg.get(
+                    "message",
+                    "Failed to request VM synthesis")
+                raise Exception(msg)
             return True
         except:
             exceptions.handle(request)

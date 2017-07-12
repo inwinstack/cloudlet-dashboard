@@ -10,11 +10,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import httplib
 import json
 import logging
 import requests
-from urlparse import urlparse
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -29,9 +27,9 @@ from horizon import workflows
 from openstack_dashboard import api
 from openstack_dashboard.api import base
 from openstack_dashboard.api import glance
-from openstack_dashboard.api.base import url_for
 from openstack_dashboard.usage import quotas
 
+from openstack_dashboard.dashboards.project.cloudlet import cloudlet_api
 from openstack_dashboard.dashboards.project.cloudlet import utils
 from openstack_dashboard.dashboards.project.instances \
     import utils as instance_utils
@@ -655,35 +653,18 @@ class SynthesisInstance(workflows.Workflow):
     def handle(self, request, context):
         # dev_mapping = None
         # user_script = None
-        print "SYNTHESIS CONTEXT"
-        print context
         try:
             # TODO: This is not the correct way to use the Synthesis API.
-            token = request.user.token.id
-            management_url = url_for(request, 'compute')
-            end_point = urlparse(management_url)
-
-            # other data
-            meta_data = {"overlay_url": context['overlay_url']}
-            s = {
-                "server": {
-                    "name": context['name'], "imageRef": context['image_id'],
-                    "flavorRef": context['flavor'], "metadata": meta_data,
-                    "min_count": "1", "max_count": "1",
-                    "security_group": context['security_group_ids'],
-                    "key_name": context['keypair_id'],
-                }}
-            params = json.dumps(s)
-            headers = {"X-Auth-Token": token, "Content-type": "application/json"}
-
-            conn = httplib.HTTPConnection(end_point[1])
-            conn.request("POST", "%s/servers" % end_point[2], params, headers)
-            response = conn.getresponse()
-            data = response.read()
-            dd = json.loads(data)
-            conn.close()
-
-            error_msg = dd.get("badRequest", None)
+            ret_json = cloudlet_api.request_synthesis(
+                request,
+                context['name'],
+                context['image_id'],
+                context['flavor'],
+                context['keypair_id'],
+                context['security_group_ids'],
+                context['overlay_url'],
+            )
+            error_msg = ret_json.get("badRequest", None)
             if error_msg is not None:
                 msg = error_msg.get("message", "Failed to request VM synthesis")
                 raise Exception(msg)
