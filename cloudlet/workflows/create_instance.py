@@ -20,12 +20,14 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.template.defaultfilters import filesizeformat
 from django.utils.translation import ugettext_lazy as _
+from django.views.decorators.debug import sensitive_variables
 
 from horizon import exceptions
 from horizon import forms
 from horizon import workflows
 
 from openstack_dashboard import api
+from openstack_dashboard.api import base
 from openstack_dashboard.api import glance
 from openstack_dashboard.api.base import url_for
 from openstack_dashboard.usage import quotas
@@ -85,24 +87,10 @@ class SetResumeDetailAction(workflows.Action):
                            label=_("Instance Name"),
                            initial="resumed_vm")
 
-    security_group_ids = forms.MultipleChoiceField(
-        label=_("Security Groups"),
-        required=True,
-        initial=["default"],
-        widget=forms.CheckboxSelectMultiple(),
-        help_text=_("Launch instance in these "
-                    "security groups."))
-
     flavor = forms.ChoiceField(
         label=_("Flavor"),
         required=True,
         help_text=_("Size of image to launch."))
-
-    network = forms.MultipleChoiceField(
-        label=_("Networks"),
-        widget=forms.ThemableCheckboxSelectMultiple(),
-        help_text=_("Launch instance with"
-                    " these networks"))
 
     class Meta:
         name = _("Base VM Info")
@@ -187,32 +175,6 @@ class SetResumeDetailAction(workflows.Action):
             choices.insert(0, ("", _("No Base VM is available.")))
         return choices
 
-    def populate_keypair_id_choices(self, request, context):
-        try:
-            keypairs = api.nova.keypair_list(request)
-            keypair_list = [(kp.name, kp.name) for kp in keypairs]
-        except:
-            keypair_list = []
-            exceptions.handle(request,
-                              _('Unable to retrieve keypairs.'))
-        if keypair_list:
-            if len(keypair_list) == 1:
-                self.fields['keypair_id'].initial = keypair_list[0][0]
-            # keypair_list.insert(0, ("", _("Select a keypair")))
-        else:
-            keypair_list = (("", _("No keypairs available.")),)
-        return keypair_list
-
-    def populate_security_group_ids_choices(self, request, context):
-        try:
-            groups = api.network.security_group_list(request)
-            security_group_list = [(sg.id, sg.name) for sg in groups]
-        except Exception:
-            exceptions.handle(request,
-                              _('Unable to retrieve list of security groups'))
-            security_group_list = []
-        return security_group_list
-
     def populate_flavor_choices(self, request, context):
         # return all flavors of Base VM image
         try:
@@ -245,9 +207,6 @@ class SetResumeDetailAction(workflows.Action):
                               _('Unable to retrieve instance flavors.'))
         return sorted(list(matching_flavors))
 
-    def populate_network_choices(self, request, context):
-        return instance_utils.network_field_data(request)
-
     def get_help_text(self):
         extra = {}
         try:
@@ -264,18 +223,167 @@ class SetResumeDetailAction(workflows.Action):
 
 class SetResumeAction(workflows.Step):
     action_class = SetResumeDetailAction
-    contributes = ("image_id", "name", "security_group_ids", "flavor", "keypair_id", "network")
+    contributes = ("image_id", "name", "flavor")
 
     def prepare_action_context(self, request, context):
-        source_type = request.GET.get("source_type", None)
-        source_id = request.GET.get("source_id", None)
-        if source_type != None and source_id != None:
-            context[source_type] = source_id
+        if 'source_type' in context and 'source_id' in context:
+            context[context['source_type']] = context['source_id']
+        return context
+
+
+KEYPAIR_IMPORT_URL = "horizon:project:access_and_security:keypairs:import"
+
+
+class SetAccessControlsAction(workflows.Action):
+    keypair = forms.ThemableDynamicChoiceField(
+        label=_("Key Pair"),
+        help_text=_("Key pair to use for "
+                    "authentication."),
+        add_item_link=KEYPAIR_IMPORT_URL)
+
+    groups = forms.MultipleChoiceField(
+        label=_("Security Groups"),
+        required=True,
+        initial=["default"],
+        widget=forms.ThemableCheckboxSelectMultiple(),
+        help_text=_("Launch instance in these "
+                    "security groups."))
+
+    class Meta(object):
+        name = _("Access & Security")
+        help_text = _("Control access to your instance via key pairs, "
+                      "security groups, and other mechanisms.")
+
+    def __init__(self, request, *args, **kwargs):
+        super(SetAccessControlsAction, self).__init__(request, *args, **kwargs)
+        # if not api.nova.can_set_server_password():
+        #     del self.fields['admin_pass']
+        #     del self.fields['confirm_admin_pass']
+        self.fields['keypair'].required = api.nova.requires_keypair()
+
+    def populate_keypair_choices(self, request, context):
+        keypairs = instance_utils.keypair_field_data(request, True)
+        if len(keypairs) == 2:
+            self.fields['keypair'].initial = keypairs[1][0]
+        return keypairs
+
+    def populate_groups_choices(self, request, context):
+        try:
+            groups = api.network.security_group_list(request)
+            if base.is_service_enabled(request, 'network'):
+                security_group_list = [(sg.id, sg.name) for sg in groups]
+            else:
+                # Nova-Network requires the groups to be listed by name
+                security_group_list = [(sg.name, sg.name) for sg in groups]
+        except Exception:
+            exceptions.handle(request,
+                              _('Unable to retrieve list of security groups'))
+            security_group_list = []
+        return security_group_list
+
+    def clean(self):
+        '''Check to make sure password fields match.'''
+        cleaned_data = super(SetAccessControlsAction, self).clean()
+        if 'admin_pass' in cleaned_data:
+            if cleaned_data['admin_pass'] != cleaned_data.get(
+                    'confirm_admin_pass', None):
+                raise forms.ValidationError(_('Passwords do not match.'))
+        return cleaned_data
+
+
+class SetAccessControls(workflows.Step):
+    action_class = SetAccessControlsAction
+    depends_on = ("project_id", "user_id")
+    contributes = ("keypair_id", "security_group_ids")
+
+    def contribute(self, data, context):
+        if data:
+            post = self.workflow.request.POST
+            context['security_group_ids'] = post.getlist("groups")
+            context['keypair_id'] = data.get("keypair", "")
+        return context
+
+
+class SetNetworkAction(workflows.Action):
+    network = forms.MultipleChoiceField(
+        label=_("Networks"),
+        widget=forms.ThemableCheckboxSelectMultiple(),
+        error_messages={
+            'required': _(
+                "At least one network must"
+                " be specified.")},
+        help_text=_("Launch instance with"
+                    " these networks"))
+    if api.neutron.is_port_profiles_supported():
+        widget = None
+    else:
+        widget = forms.HiddenInput()
+    profile = forms.ChoiceField(label=_("Policy Profiles"),
+                                required=False,
+                                widget=widget,
+                                help_text=_("Launch instance with "
+                                            "this policy profile"))
+
+    def __init__(self, request, *args, **kwargs):
+        super(SetNetworkAction, self).__init__(request, *args, **kwargs)
+        network_list = self.fields["network"].choices
+        if len(network_list) == 1:
+            self.fields['network'].initial = [network_list[0][0]]
+        if api.neutron.is_port_profiles_supported():
+            self.fields['profile'].choices = (
+                self.get_policy_profile_choices(request))
+
+    class Meta(object):
+        name = _("Networking")
+        permissions = ('openstack.services.network',)
+        help_text = _("Select networks for your instance.")
+
+    def populate_network_choices(self, request, context):
+        return instance_utils.network_field_data(request)
+
+    def get_policy_profile_choices(self, request):
+        profile_choices = [('', _("Select a profile"))]
+        for profile in self._get_profiles(request, 'policy'):
+            profile_choices.append((profile.id, profile.name))
+        return profile_choices
+
+    def _get_profiles(self, request, type_p):
+        profiles = []
+        try:
+            profiles = api.neutron.profile_list(request, type_p)
+        except Exception:
+            msg = _('Network Profiles could not be retrieved.')
+            exceptions.handle(request, msg)
+        return profiles
+
+
+class SetNetwork(workflows.Step):
+    action_class = SetNetworkAction
+    # Disabling the template drag/drop only in the case port profiles
+    # are used till the issue with the drag/drop affecting the
+    # profile_id detection is fixed.
+    if api.neutron.is_port_profiles_supported():
+        contributes = ("network_id", "profile_id",)
+    else:
+        template_name = "project/instances/_update_networks.html"
+        contributes = ("network_id",)
+
+    def contribute(self, data, context):
+        if data:
+            networks = self.workflow.request.POST.getlist("network")
+            # If no networks are explicitly specified, network list
+            # contains an empty string, so remove it.
+            networks = [n for n in networks if n != '']
+            if networks:
+                context['network_id'] = networks
+
+            if api.neutron.is_port_profiles_supported():
+                context['profile_id'] = data.get('profile', None)
         return context
 
 
 class ResumeInstance(workflows.Workflow):
-    slug = "cloudlet resume base instance"
+    slug = "cloudlet_resume_base_instance"
     name = _("Cloudlet Resume Base VM")
     finalize_button_name = _("Launch")
     success_message = _('Cloudlet launched %(count)s named "%(name)s".')
@@ -283,7 +391,9 @@ class ResumeInstance(workflows.Workflow):
     success_url = "horizon:project:cloudlet:index"
     multipart = True
     default_steps = (SelectProjectUser,
-                     SetResumeAction)
+                     SetResumeAction,
+                     SetAccessControls,
+                     SetNetwork)
 
     def format_status_message(self, message):
         name = self.context.get('name', 'unknown instance')
@@ -294,11 +404,12 @@ class ResumeInstance(workflows.Workflow):
         else:
             return message % {"count": _("instance"), "name": name}
 
+    @sensitive_variables('context')
     def handle(self, request, context):
         dev_mapping = None
         user_script = None
 
-        netids = context.get('network', None)
+        netids = context.get('network_id', None)
         if netids:
             nics = [{"net-id": netid, "v4-fixed-ip": ""}
                     for netid in netids]
@@ -319,6 +430,8 @@ class ResumeInstance(workflows.Workflow):
             nics.extend([{'port-id': port} for port in ports])
 
         try:
+            print "RESUME CONTEXT"
+            print context
             api.nova.server_create(request,
                                    context['name'],
                                    context['image_id'],
@@ -328,8 +441,7 @@ class ResumeInstance(workflows.Workflow):
                                    context['security_group_ids'],
                                    dev_mapping,
                                    nics=nics,
-                                   instance_count=1,
-                                   )
+                                   instance_count=1,)
             return True
         except:
             exceptions.handle(request)
@@ -341,26 +453,14 @@ class SetSynthesizeDetailsAction(workflows.Action):
                                   required=True,
                                   label=_("URL for VM overlay"),
                                   initial="http://")
+
     name = forms.CharField(max_length=80,
                            label=_("Instance Name"),
                            initial="synthesized_vm")
-    security_group_ids = forms.MultipleChoiceField(
-        label=_("Security Groups"),
-        required=True,
-        initial=["default"],
-        widget=forms.CheckboxSelectMultiple(),
-        help_text=_("Launch instance in these "
-                    "security groups."))
 
     flavor = forms.ChoiceField(label=_("Flavor"),
                                required=True,
                                help_text=_("Size of image to launch."))
-
-    network = forms.MultipleChoiceField(
-        label=_("Networks"),
-        widget=forms.ThemableCheckboxSelectMultiple(),
-        help_text=_("Launch instance with"
-                    " these networks"))
 
     class Meta:
         name = _("VM overlay Info")
@@ -416,32 +516,6 @@ class SetSynthesizeDetailsAction(workflows.Action):
             # specify associated base VM from the metadata
             cleaned_data['image_id'] = str(matching_image.id)
             return cleaned_data
-
-    def populate_keypair_id_choices(self, request, context):
-        try:
-            keypairs = api.nova.keypair_list(request)
-            keypair_list = [(kp.name, kp.name) for kp in keypairs]
-        except:
-            keypair_list = []
-            exceptions.handle(request,
-                              _('Unable to retrieve keypairs.'))
-        if keypair_list:
-            if len(keypair_list) == 1:
-                self.fields['keypair_id'].initial = keypair_list[0][0]
-            # keypair_list.insert(0, ("", _("Select a keypair")))
-        else:
-            keypair_list = (("", _("No keypairs available.")),)
-        return keypair_list
-
-    def populate_security_group_ids_choices(self, request, context):
-        try:
-            groups = api.network.security_group_list(request)
-            security_group_list = [(sg.id, sg.name) for sg in groups]
-        except Exception:
-            exceptions.handle(request,
-                              _('Unable to retrieve list of security groups'))
-            security_group_list = []
-        return security_group_list
 
     def _get_available_images(self, request, context):
         if not hasattr(self, '_images_cache'):
@@ -538,9 +612,6 @@ class SetSynthesizeDetailsAction(workflows.Action):
                               _('Unable to retrieve instance flavors.'))
         return sorted(list(matching_flavors))
 
-    def populate_network_choices(self, request, context):
-        return instance_utils.network_field_data(request)
-
     def get_help_text(self):
         extra = {}
         try:
@@ -557,18 +628,20 @@ class SetSynthesizeDetailsAction(workflows.Action):
 
 class SetSynthesizeAction(workflows.Step):
     action_class = SetSynthesizeDetailsAction
-    contributes = ("image_id", "overlay_url", "name", "security_group_ids", "flavor", "keypair_id", "network")
+    contributes = ("image_id", "overlay_url", "name", "flavor")
 
 
 class SynthesisInstance(workflows.Workflow):
-    slug = "cloudlet syntehsize VM"
+    slug = "cloudlet_syntehsize_VM"
     name = _("Cloudlet Synthesize VM")
     finalize_button_name = _("Synthesize")
     success_message = _('Cloudlet synthesized %(count)s named "%(name)s".')
     failure_message = _('Cloudlet is unable to synthesize %(count)s named "%(name)s".')
     success_url = "horizon:project:cloudlet:index"
     default_steps = (SelectProjectUser,
-                     SetSynthesizeAction,)
+                     SetSynthesizeAction,
+                     SetAccessControls,
+                     SetNetwork)
 
     def format_status_message(self, message):
         name = self.context.get('name', 'unknown instance')
@@ -582,6 +655,8 @@ class SynthesisInstance(workflows.Workflow):
     def handle(self, request, context):
         # dev_mapping = None
         # user_script = None
+        print "SYNTHESIS CONTEXT"
+        print context
         try:
             # TODO: This is not the correct way to use the Synthesis API.
             token = request.user.token.id

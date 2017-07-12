@@ -101,7 +101,7 @@ class IndexView(tables.MultiTableView):
                      if (im.properties.get("cloudlet_type", None) == "cloudlet_overlay")
                             and (im.owner == self.request.user.tenant_id)]
         except Exception:
-            images = []
+            snaps = []
             self._prev = self._more = False
             exceptions.handle(self.request, _("Unable to retrieve images."))
         return snaps
