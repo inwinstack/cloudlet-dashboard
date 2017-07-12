@@ -10,15 +10,16 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from django import http
 from django import shortcuts
-from django.http import HttpResponse
 from django.core.urlresolvers import reverse
 from django.core.urlresolvers import reverse_lazy
 from django.utils.translation import ugettext_lazy as _
 
 from horizon import exceptions
-from horizon import messages
 from horizon import forms
+from horizon import messages
+from horizon import workflows
 from horizon.utils import memoized
 
 from openstack_dashboard import api
@@ -118,7 +119,7 @@ def download_vm_overlay(request):
         client = api.glance.glanceclient(request)
 
         body = client.images.data(image_id)
-        response = HttpResponse(body, content_type="application/octet-stream")
+        response = http.HttpResponse(body, content_type="application/octet-stream")
         response['Content-Disposition'] = 'attachment; filename="%s"' % image_name
         return response
     except Exception, e:

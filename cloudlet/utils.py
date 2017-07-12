@@ -10,17 +10,46 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import os
 import math
+import os
 import zipfile
+
+from xml.etree import ElementTree
 from lxml import etree
 from tempfile import mkdtemp
-from xml.etree import ElementTree
 
 from openstack_dashboard import api
 
 import elijah.provisioning.memory_util as elijah_memory_util
+import glanceclient.exc as glance_exceptions
 from elijah.provisioning.package import BaseVMPackage
+
+
+def get_cloudlet_type(instance):
+    request = instance.request
+    image_id = getattr(instance.image, 'id', None)
+    metadata = instance.metadata
+    # TODO: glance versoin v1 and v2 is different, so it will change.
+    try:
+        if image_id is not None:
+            image = api.glance.image_get(request, image_id)
+            if hasattr(image, 'properties') != True:
+                return None
+            properties = getattr(image, 'properties')
+            if properties is None or properties.get('is_cloudlet') is None:
+                return None
+
+            # now it's either resumed base instance or synthesized instance
+            # synthesized instance has meta that for overlay URL
+            if (metadata.get('overlay_url') is not None) or \
+                    (metadata.get('handoff_info') is not None):
+                return 'cloudlet_overlay'
+            else:
+                return 'cloudlet_base_disk'
+        else:
+            return None
+    except glance_exceptions.ClientException:
+        return None
 
 
 def find_matching_flavor(flavor_list, cpu_count, memory_mb, disk_gb):
@@ -72,6 +101,10 @@ class BaseVMs():
 
         for image in image_detail:
             properties = getattr(image, "properties")
+            if properties is None or len(properties) == 0:
+                continue
+            if properties.get("cloudlet_type") != "cloudlet_base_disk":
+                continue
             base_sha256_uuid = properties.get("base_sha256_uuid")
             if base_sha256_uuid == base_hashvalue:
                 return image

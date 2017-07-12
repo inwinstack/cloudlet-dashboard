@@ -10,19 +10,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from django.conf.urls import include
 from django.conf.urls import url
 
-from openstack_dashboard.dashboards.project.cloudlet.images \
-    import urls as image_urls
-from openstack_dashboard.dashboards.project.cloudlet.instances \
-    import urls as instance_urls
-from openstack_dashboard.dashboards.project.cloudlet \
-    import views
+from openstack_dashboard.dashboards.project.cloudlet.instances import views
 
+
+INSTANCES = r'^(?P<instance_id>[^/]+)/%s$'
 
 urlpatterns = [
-    url(r'^$', views.IndexView.as_view(), name='index'),
-    url(r'', include(image_urls, namespace='images')),
-    url(r'', include(instance_urls, namespace='instances')),
+    url(r'^resume/$', views.ResumeInstanceView.as_view(), name='resume'),
+    url(r'^synthesis/$', views.SynthesisInstanceView.as_view(), name='synthesis'),
+    url(INSTANCES % 'handoff', views.HandoffInstanceView.as_view(), name='handoff'),
 ]

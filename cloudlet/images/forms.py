@@ -10,9 +10,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import logging
 import os
 import shutil
-import logging
 
 from django.conf import settings
 from django.forms import ValidationError
@@ -25,7 +25,9 @@ from horizon import messages
 
 from openstack_dashboard import api
 from openstack_dashboard import policy
+
 from openstack_dashboard.dashboards.project.cloudlet import utils
+
 
 LOG = logging.getLogger(__name__)
 
@@ -45,8 +47,8 @@ def create_image_metadata(data, name, path, glance_ref=None):
         'diskhash': 'cloudlet_base_disk_hash',
         'memhash': 'cloudlet_base_memory_hash'
     }
-    base_type = cloudlet_types.get(name.split("-")[1])
 
+    base_type = cloudlet_types.get(name.split("-")[1])
     properties = {
         'image_type': 'snapshot',
         'image_location': 'snapshot',
@@ -197,7 +199,7 @@ class ImportBaseForm(forms.SelfHandlingForm):
 
             # Create disk image metadata and Upload image
             disk_name = data['name'] + "-disk"
-            disk_path = os.path.join(temp_dir, value)
+            disk_path = os.path.join(temp_dir, basevms_path['disk'])
             meta = create_image_metadata(data, disk_name, disk_path, glance_ref)
             image = api.glance.image_create(request, **meta)
             # All Base VM zip file upload to glance success
