@@ -652,6 +652,7 @@ class SynthesisInstance(workflows.Workflow):
     def handle(self, request, context):
         dev_mapping = None
         user_script = None
+
         netids = context.get('network_id', None)
         if netids:
             nics = [{"net-id": netid, "v4-fixed-ip": ""}
