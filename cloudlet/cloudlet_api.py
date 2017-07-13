@@ -42,34 +42,6 @@ def request_create_overlay(request, instance_id):
     return dd
 
 
-def request_synthesis(request, vm_name, base_disk_id, flavor_id, key_name,
-                      security_group_id, overlay_url):
-    token = request.user.token.id
-    management_url = url_for(request, 'compute')
-    end_point = urlparse(management_url)
-
-    # other data
-    meta_data = {"overlay_url": overlay_url}
-    s = {
-        "server": {
-            "name": vm_name, "imageRef": base_disk_id,
-            "flavorRef": flavor_id, "metadata": meta_data,
-            "min_count": "1", "max_count": "1",
-            "security_group": security_group_id,
-            "key_name": key_name,
-        }}
-    params = json.dumps(s)
-    headers = {"X-Auth-Token": token, "Content-type": "application/json"}
-
-    conn = httplib.HTTPConnection(end_point[1])
-    conn.request("POST", "%s/servers" % end_point[2], params, headers)
-    response = conn.getresponse()
-    data = response.read()
-    dd = json.loads(data)
-    conn.close()
-    return dd
-
-
 def request_handoff(request, instance_id, handoff_url,
                     dest_token, dest_vmname):
     token = request.user.token.id
