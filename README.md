@@ -44,4 +44,4 @@ Restart `apache2` service：
 $ sudo service apache2 restart
 ```
 
-If your finished, you can open the OpenStack Dashboard and see the Cloudlet add to Dashboard.
+If you're finished, you can open the OpenStack Dashboard and see the Cloudlet panel added to the Dashboard.

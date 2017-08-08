@@ -56,8 +56,6 @@ class HandoffInstanceView(forms.ModalFormView):
         context = super(HandoffInstanceView, self).get_context_data(**kwargs)
         context['instance_id'] = self.kwargs['instance_id']
         context['can_set_server_password'] = api.nova.can_set_server_password()
-        print "Form view data"
-        print context
         return context
 
     def get_initial(self):

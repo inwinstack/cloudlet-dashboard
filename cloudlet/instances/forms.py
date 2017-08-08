@@ -51,6 +51,12 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         widget=forms.TextInput(attrs={
             'placeholder': 'handoff-vm'}
         ))
+    dest_network = forms.CharField(
+        max_length=255,
+        label=_("Network Name at the destination"),
+        widget=forms.TextInput(attrs={
+            'placeholder': 'default'}
+        ))
 
     def __init__(self, request, *args, **kwargs):
         super(HandoffInstanceForm, self).__init__(request, *args, **kwargs)
@@ -115,6 +121,7 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         dest_account = cleaned_data.get('dest_account', None)
         dest_password = cleaned_data.get('dest_password', None)
         dest_tenant = cleaned_data.get('dest_tenant', None)
+        dest_network = cleaned_data.get('dest_network', None)
 
         # check fields
         if cleaned_data.get('dest_vmname', None) is None:
@@ -122,6 +129,9 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
             raise forms.ValidationError(_(msg))
         if dest_addr is None:
             msg = "Need URL to fetch VM overlay"
+            raise forms.ValidationError(_(msg))
+        if dest_network is None:
+            msg = "Need Network for VM at the destination"
             raise forms.ValidationError(_(msg))
 
         # get token of the destination
@@ -136,7 +146,6 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         except Exception as e:
             msg = "Cannot get Auth-token from %s" % dest_addr
             raise forms.ValidationError(_(msg))
-        print cleaned_data
         return cleaned_data
 
     def handle(self, request, context):
