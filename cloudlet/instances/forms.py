@@ -111,9 +111,13 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                     for endpoint in service['endpoints']:
                         if endpoint['interface'] == "public":
                             glance_endpoint = endpoint['url']
+                elif service['name'] == "neutron":
+                    for endpoint in service['endpoints']:
+                        if endpoint['interface'] == "public":
+                            neutron_endpoint = endpoint['url']
         except KeyError as e:
             raise
-        return api_token, nova_endpoint, glance_endpoint
+        return api_token, nova_endpoint, glance_endpoint, neutron_endpoint
 
     def clean(self):
         cleaned_data = super(HandoffInstanceForm, self).clean()
@@ -136,12 +140,12 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
 
         # get token of the destination
         try:
-            dest_token, dest_nova_endpoint, dest_glance_endpoint = \
-                self._get_token(dest_addr, dest_account,
-                                dest_password, dest_tenant)
+            dest_token, dest_nova_endpoint, dest_glance_endpoint, dest_neutron_endpoint = \
+                self._get_token(dest_addr, dest_account, dest_password, dest_tenant)
             cleaned_data['dest_token'] = dest_token
             cleaned_data['dest_nova_endpoint'] = dest_nova_endpoint
             cleaned_data['dest_glance_endpoint'] = dest_glance_endpoint
+            cleaned_data['dest_network_endpoint'] = dest_neutron_endpoint
             cleaned_data['instance_id'] = self.instance_id
         except Exception as e:
             msg = "Cannot get Auth-token from %s" % dest_addr
@@ -156,6 +160,8 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                 request,
                 context['instance_id'],
                 context['dest_nova_endpoint'],
+                context['dest_glance_endpoint'],
+                context['dest_network_endpoint'],
                 context['dest_token'],
                 context['dest_vmname']
             )

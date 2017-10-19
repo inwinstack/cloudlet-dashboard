@@ -42,7 +42,8 @@ def request_create_overlay(request, instance_id):
 
 
 def request_handoff(request, instance_id, handoff_url,
-                    dest_token, dest_vmname):
+                    glance_url, neutron_url, dest_token,
+                    dest_vmname):
     token = request.user.token.id
     management_url = url_for(request, 'compute')
     end_point = urlparse(management_url)
@@ -50,6 +51,8 @@ def request_handoff(request, instance_id, handoff_url,
     params = json.dumps({
         "cloudlet-handoff": {
             "handoff_url": handoff_url,
+            "glance_url": glance_url,
+            "neutron_url": neutron_url,
             "dest_token": dest_token,
             "dest_vmname": dest_vmname,
         }
