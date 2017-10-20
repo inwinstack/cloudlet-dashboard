@@ -163,7 +163,8 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                 context['dest_glance_endpoint'],
                 context['dest_network_endpoint'],
                 context['dest_token'],
-                context['dest_vmname']
+                context['dest_vmname'],
+                context['dest_network']
             )
             error_msg = ret_json.get("badRequest", None)
             if error_msg is not None:

@@ -43,7 +43,7 @@ def request_create_overlay(request, instance_id):
 
 def request_handoff(request, instance_id, handoff_url,
                     glance_url, neutron_url, dest_token,
-                    dest_vmname):
+                    dest_vmname, dest_network):
     token = request.user.token.id
     management_url = url_for(request, 'compute')
     end_point = urlparse(management_url)
@@ -55,6 +55,7 @@ def request_handoff(request, instance_id, handoff_url,
             "neutron_url": neutron_url,
             "dest_token": dest_token,
             "dest_vmname": dest_vmname,
+            "dest_network": dest_network,
         }
     })
     headers = {"X-Auth-Token": token, "Content-type": "application/json"}
