@@ -42,7 +42,7 @@ def request_create_overlay(request, instance_id):
 
 
 def request_handoff(request, instance_id, handoff_url,
-                    glance_url, neutron_url, dest_token,
+                    glance_url, neutron_url, dest_token, dest_proejct_id,
                     dest_vmname, dest_network):
     token = request.user.token.id
     management_url = url_for(request, 'compute')
@@ -55,6 +55,7 @@ def request_handoff(request, instance_id, handoff_url,
             "neutron_url": neutron_url,
             "dest_token": dest_token,
             "dest_vmname": dest_vmname,
+            "dest_project_id": dest_proejct_id,
             "dest_network": dest_network,
         }
     })

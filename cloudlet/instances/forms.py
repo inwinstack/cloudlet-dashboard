@@ -99,8 +99,10 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         dd = json.loads(data)
         conn.close()
         try:
+            project_id = dd['token']['project']['id']
             nova_endpoint = None
             glance_endpoint = None
+            neutron_endpoint = None
             service_list = dd['token']['catalog']
             for service in service_list:
                 if service['name'] == "nova":
@@ -117,7 +119,7 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                             neutron_endpoint = endpoint['url']
         except KeyError as e:
             raise
-        return api_token, nova_endpoint, glance_endpoint, neutron_endpoint
+        return api_token, project_id, nova_endpoint, glance_endpoint, neutron_endpoint
 
     def clean(self):
         cleaned_data = super(HandoffInstanceForm, self).clean()
@@ -140,9 +142,10 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
 
         # get token of the destination
         try:
-            dest_token, dest_nova_endpoint, dest_glance_endpoint, dest_neutron_endpoint = \
+            dest_token, dest_project_id, dest_nova_endpoint, dest_glance_endpoint, dest_neutron_endpoint = \
                 self._get_token(dest_addr, dest_account, dest_password, dest_tenant)
             cleaned_data['dest_token'] = dest_token
+            cleaned_data['dest_project_id'] = dest_project_id
             cleaned_data['dest_nova_endpoint'] = dest_nova_endpoint
             cleaned_data['dest_glance_endpoint'] = dest_glance_endpoint
             cleaned_data['dest_network_endpoint'] = dest_neutron_endpoint
@@ -163,6 +166,7 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                 context['dest_glance_endpoint'],
                 context['dest_network_endpoint'],
                 context['dest_token'],
+                context['dest_project_id'],
                 context['dest_vmname'],
                 context['dest_network']
             )
