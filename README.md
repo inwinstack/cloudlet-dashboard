@@ -27,14 +27,15 @@ $ fab install
 ```
 
 ## 2. Install cloudlet-dashboard
-Download the `cloudlet-dashboard` repository：
+Download the `cloudlet-dashboard` repository and change the `dev` branch：
 ```sh
 $ git clone https://github.com/ellis-wu/cloudlet-dashboard.git
+$ git checkout dev
 ```
 
 Move the files to the correct folder：
 ```sh
-$ cd cloudlet-dashboard/
+$ cd cloudlet-dashboard
 $ cp -r cloudlet/ /opt/stack/horizon/openstack_dashboard/dashboards/project/
 $ cp enabled/_1080_project_cloudlet_panel.py /opt/stack/horizon/openstack_dashboard/enabled/
 ```

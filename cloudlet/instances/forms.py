@@ -51,6 +51,12 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         widget=forms.TextInput(attrs={
             'placeholder': 'handoff-vm'}
         ))
+    dest_network = forms.CharField(
+        max_length=255,
+        label=_("Network Name at the destination"),
+        widget=forms.TextInput(attrs={
+            'placeholder': 'default'}
+        ))
 
     def __init__(self, request, *args, **kwargs):
         super(HandoffInstanceForm, self).__init__(request, *args, **kwargs)
@@ -93,8 +99,10 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         dd = json.loads(data)
         conn.close()
         try:
+            project_id = dd['token']['project']['id']
             nova_endpoint = None
             glance_endpoint = None
+            neutron_endpoint = None
             service_list = dd['token']['catalog']
             for service in service_list:
                 if service['name'] == "nova":
@@ -105,9 +113,13 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                     for endpoint in service['endpoints']:
                         if endpoint['interface'] == "public":
                             glance_endpoint = endpoint['url']
+                elif service['name'] == "neutron":
+                    for endpoint in service['endpoints']:
+                        if endpoint['interface'] == "public":
+                            neutron_endpoint = endpoint['url']
         except KeyError as e:
             raise
-        return api_token, nova_endpoint, glance_endpoint
+        return api_token, project_id, nova_endpoint, glance_endpoint, neutron_endpoint
 
     def clean(self):
         cleaned_data = super(HandoffInstanceForm, self).clean()
@@ -115,6 +127,7 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         dest_account = cleaned_data.get('dest_account', None)
         dest_password = cleaned_data.get('dest_password', None)
         dest_tenant = cleaned_data.get('dest_tenant', None)
+        dest_network = cleaned_data.get('dest_network', None)
 
         # check fields
         if cleaned_data.get('dest_vmname', None) is None:
@@ -123,20 +136,23 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
         if dest_addr is None:
             msg = "Need URL to fetch VM overlay"
             raise forms.ValidationError(_(msg))
+        if dest_network is None:
+            msg = "Need Network for VM at the destination"
+            raise forms.ValidationError(_(msg))
 
         # get token of the destination
         try:
-            dest_token, dest_nova_endpoint, dest_glance_endpoint = \
-                self._get_token(dest_addr, dest_account,
-                                dest_password, dest_tenant)
+            dest_token, dest_project_id, dest_nova_endpoint, dest_glance_endpoint, dest_neutron_endpoint = \
+                self._get_token(dest_addr, dest_account, dest_password, dest_tenant)
             cleaned_data['dest_token'] = dest_token
+            cleaned_data['dest_project_id'] = dest_project_id
             cleaned_data['dest_nova_endpoint'] = dest_nova_endpoint
             cleaned_data['dest_glance_endpoint'] = dest_glance_endpoint
+            cleaned_data['dest_network_endpoint'] = dest_neutron_endpoint
             cleaned_data['instance_id'] = self.instance_id
         except Exception as e:
             msg = "Cannot get Auth-token from %s" % dest_addr
             raise forms.ValidationError(_(msg))
-        print cleaned_data
         return cleaned_data
 
     def handle(self, request, context):
@@ -147,8 +163,12 @@ class HandoffInstanceForm(forms.SelfHandlingForm):
                 request,
                 context['instance_id'],
                 context['dest_nova_endpoint'],
+                context['dest_glance_endpoint'],
+                context['dest_network_endpoint'],
                 context['dest_token'],
-                context['dest_vmname']
+                context['dest_project_id'],
+                context['dest_vmname'],
+                context['dest_network']
             )
             error_msg = ret_json.get("badRequest", None)
             if error_msg is not None:
