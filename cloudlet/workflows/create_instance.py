@@ -267,12 +267,8 @@ class SetAccessControlsAction(workflows.Action):
 
     def populate_groups_choices(self, request, context):
         try:
-            groups = api.network.security_group_list(request)
-            if base.is_service_enabled(request, 'network'):
-                security_group_list = [(sg.id, sg.name) for sg in groups]
-            else:
-                # Nova-Network requires the groups to be listed by name
-                security_group_list = [(sg.name, sg.name) for sg in groups]
+            groups = api.neutron.security_group_list(request)
+            security_group_list = [(sg.id, sg.name) for sg in groups]
         except Exception:
             exceptions.handle(request,
                               _('Unable to retrieve list of security groups'))
@@ -312,24 +308,12 @@ class SetNetworkAction(workflows.Action):
                 " be specified.")},
         help_text=_("Launch instance with"
                     " these networks"))
-    if api.neutron.is_port_profiles_supported():
-        widget = None
-    else:
-        widget = forms.HiddenInput()
-    profile = forms.ChoiceField(label=_("Policy Profiles"),
-                                required=False,
-                                widget=widget,
-                                help_text=_("Launch instance with "
-                                            "this policy profile"))
 
     def __init__(self, request, *args, **kwargs):
         super(SetNetworkAction, self).__init__(request, *args, **kwargs)
         network_list = self.fields["network"].choices
         if len(network_list) == 1:
             self.fields['network'].initial = [network_list[0][0]]
-        if api.neutron.is_port_profiles_supported():
-            self.fields['profile'].choices = (
-                self.get_policy_profile_choices(request))
 
     class Meta(object):
         name = _("Networking")
@@ -339,32 +323,11 @@ class SetNetworkAction(workflows.Action):
     def populate_network_choices(self, request, context):
         return instance_utils.network_field_data(request)
 
-    def get_policy_profile_choices(self, request):
-        profile_choices = [('', _("Select a profile"))]
-        for profile in self._get_profiles(request, 'policy'):
-            profile_choices.append((profile.id, profile.name))
-        return profile_choices
-
-    def _get_profiles(self, request, type_p):
-        profiles = []
-        try:
-            profiles = api.neutron.profile_list(request, type_p)
-        except Exception:
-            msg = _('Network Profiles could not be retrieved.')
-            exceptions.handle(request, msg)
-        return profiles
-
 
 class SetNetwork(workflows.Step):
     action_class = SetNetworkAction
-    # Disabling the template drag/drop only in the case port profiles
-    # are used till the issue with the drag/drop affecting the
-    # profile_id detection is fixed.
-    if api.neutron.is_port_profiles_supported():
-        contributes = ("network_id", "profile_id",)
-    else:
-        template_name = "project/instances/_update_networks.html"
-        contributes = ("network_id",)
+    template_name = "project/instances/_update_networks.html"
+    contributes = ("network_id",)
 
     def contribute(self, data, context):
         if data:
@@ -374,9 +337,6 @@ class SetNetwork(workflows.Step):
             networks = [n for n in networks if n != '']
             if networks:
                 context['network_id'] = networks
-
-            if api.neutron.is_port_profiles_supported():
-                context['profile_id'] = data.get('profile', None)
         return context
 
 
@@ -413,13 +373,6 @@ class ResumeInstance(workflows.Workflow):
                     for netid in netids]
         else:
             nics = None
-
-        port_profiles_supported = api.neutron.is_port_profiles_supported()
-
-        if port_profiles_supported:
-            nics = self.set_network_port_profiles(request,
-                                                  context['network_id'],
-                                                  context['profile_id'])
 
         ports = context.get('ports')
         if ports:
@@ -660,13 +613,6 @@ class SynthesisInstance(workflows.Workflow):
         else:
             nics = None
 
-        port_profiles_supported = api.neutron.is_port_profiles_supported()
-
-        if port_profiles_supported:
-            nics = self.set_network_port_profiles(request,
-                                                  context['network_id'],
-                                                  context['profile_id'])
-
         ports = context.get('ports')
         if ports:
             if nics is None:
@@ -681,7 +627,7 @@ class SynthesisInstance(workflows.Workflow):
                                    context['flavor'],
                                    context['keypair_id'],
                                    user_script,
-                                   context['security_group_ids'],
+                                   context['f'],
                                    dev_mapping,
                                    nics=nics,
                                    instance_count=1,
