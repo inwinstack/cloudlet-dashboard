@@ -1,6 +1,5 @@
 # Cloudlet-dashboard
-Horizon plugin for Cloudlet.
-
+OpenStack Horizon plugin for Cloudlet.
 
 ## Tested Platform
 We have tested `Cloudlet-dashboard` on **Ubuntu 16.04 LTS** using the **Devstack stable/newton** branch.
